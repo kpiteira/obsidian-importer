@@ -40,15 +40,17 @@ This task wires the previous work done to create the ImporterSettingsTab in main
 
 ### Task 1.2.1: Create URL input modal
 - [ ] **Task 1.2.1.1**: Implement `UrlInputModal` class extending Obsidian's Modal component with proper title and styling
-- [ ] **Task 1.2.1.2**: Add input field for URL with Enter key handling and focus management
-- [ ] **Task 1.2.1.3**: Implement URL validation function with security checks for localhost/internal IPs (127.0.0.1, 192.168.x.x, etc.)
-- [ ] **Task 1.2.1.4**: Add error display for invalid URLs with clear user feedback message
+- [x] **Task 1.2.1.2**: Add input field for URL with Enter key handling and focus management
+- [x] **Task 1.2.1.3**: Implement URL validation function with security checks for localhost/internal IPs (127.0.0.1, 192.168.x.x, etc.)
+- [x] **Task 1.2.1.4**: Add error display for invalid URLs with clear user feedback message
+- [x] **Task 1.2.1.5**: Add the modal to the main plugin (main.ts), replacing all the sample commands from the template repository
 
 ### Task 1.2.2: Implement content type detection
-- [ ] **Task 1.2.2.1**: Create `ContentTypeHandler` interface with `detect(url: URL): boolean` and `type: string` properties
-- [ ] **Task 1.2.2.2**: Implement `YouTubeHandler` class for detecting YouTube URLs (youtube.com, youtu.be domains)
-- [ ] **Task 1.2.2.3**: Create detection dispatcher function to find appropriate handler for a given URL
-- [ ] **Task 1.2.2.4**: Add error handling for unsupported content types with user-friendly messages
+- [x] **Task 1.2.2.1**: Create `ContentTypeHandler` interface with `detect(url: URL): boolean` and `type: string` properties
+- [x] **Task 1.2.2.2**: Implement `YouTubeHandler` class for detecting YouTube URLs (youtube.com, youtu.be domains)
+- [x] **Task 1.2.2.3**: Create detection dispatcher function to find appropriate handler for a given URL
+- [x] **Task 1.2.2.4**: Add error handling for unsupported content types with user-friendly messages
+- [x] **Task 1.2.2.5**: Wire this handling to the URL provided in the modal `UrlInputModal` and display a ribbon to say if it detected whether it is a YouTube video or not
 
 ## YouTube Content Processing
 

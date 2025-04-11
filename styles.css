@@ -5,4 +5,78 @@ available in the app when your plugin is enabled.
 
 If your plugin does not need CSS, delete this file.
 
-*/
+/* --- Obsidian Importer URL Input Modal Styles --- */
+.obsidian-importer-url-input-modal {
+  background: #232323;
+/* --- Detection Ribbon Styles --- */
+.obsidian-importer-detection-ribbon {
+  margin-top: 1em;
+  padding: 0.5em 1em;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 1em;
+  text-align: center;
+  transition: background 0.2s, color 0.2s;
+}
+.obsidian-importer-detection-ribbon-success {
+  background: #1e7e34;
+  color: #fff;
+  border: 1px solid #155724;
+}
+.obsidian-importer-detection-ribbon-error {
+  background: #e03131;
+  color: #fff;
+  border: 1px solid #a71d2a;
+}
+  border-radius: 14px;
+  padding: 32px 32px 24px 32px;
+  max-width: 520px;
+  min-width: 400px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.obsidian-importer-url-input-modal .modal-title {
+  color: #ededed;
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.obsidian-importer-url-input {
+  width: 100%;
+  font-size: 1.25rem;
+  padding: 14px 16px;
+  border: 3px solid #555;
+  border-radius: 8px;
+  background: #232323;
+  color: #ededed;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+.obsidian-importer-url-input:focus {
+  border-color: #888;
+}
+.obsidian-importer-url-input::placeholder {
+  color: #888;
+  opacity: 1;
+  font-size: 1.1rem;
+}
+
+/* Optional: Style the close button for better visibility */
+.obsidian-importer-url-input-modal .modal-close-button {
+  color: #ccc;
+  font-size: 1.5rem;
+  top: 18px;
+  right: 18px;
+  opacity: 0.85;
+  transition: opacity 0.2s;
+}
+.obsidian-importer-url-input-modal .modal-close-button:hover {
+  opacity: 1;
+  color: #fff;
+}
+
