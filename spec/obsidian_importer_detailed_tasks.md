@@ -5,19 +5,19 @@ This document breaks down each task into granular, AI-codable subtasks with spec
 ## Project Setup and Configuration
 
 ### Task 1.1.1: Scaffold TypeScript project structure
-- [ ] **Task 1.1.1.1**: Clone the official Obsidian sample plugin template (`https://github.com/obsidianmd/obsidian-sample-plugin`)
-- [ ] **Task 1.1.1.2**: Update plugin metadata in `manifest.json` with name "Obsidian Importer", ID "obsidian-importer", and appropriate description
-- [ ] **Task 1.1.1.3**: Create folder structure according to architecture doc: `src/handlers/`, `src/ui/`, `src/utils/`, `src/models/`, `src/services/`
-- [ ] **Task 1.1.1.4**: Set up TypeScript configuration in `tsconfig.json` with strict type checking and appropriate module resolution
+- [x] **Task 1.1.1.1**: Clone the official Obsidian sample plugin template (`https://github.com/obsidianmd/obsidian-sample-plugin`)
+- [x] **Task 1.1.1.2**: Update plugin metadata in `manifest.json` with name "Obsidian Importer", ID "obsidian-importer", and appropriate description
+- [x] **Task 1.1.1.3**: Create folder structure according to architecture doc: `src/handlers/`, `src/ui/`, `src/utils/`, `src/models/`, `src/services/`
+- [x] **Task 1.1.1.4**: Set up TypeScript configuration in `tsconfig.json` with strict type checking and appropriate module resolution
 
 ### Task 1.1.2: Set up development environment
-- [ ] **Task 1.1.2.1**: Install required dependencies for Obsidian plugin development (obsidian, tslib, etc.)
-- [ ] **Task 1.1.2.2**: Configure build system with npm scripts for development (`npm run dev`) and production builds (`npm run build`)
-- [ ] **Task 1.1.2.3**: Set up testing environment with Vitest and create initial test structure in a `tests/` folder
-- [ ] **Task 1.1.2.4**: Create a symlink to Obsidian plugins folder for local testing with instructions in README
+- [x] **Task 1.1.2.1**: Install required dependencies for Obsidian plugin development (obsidian, tslib, etc.)
+- [x] **Task 1.1.2.2**: Configure build system with npm scripts for development (`npm run dev`) and production builds (`npm run build`)
+- [x] **Task 1.1.2.3**: Set up testing environment with Vitest and create initial test structure in a `tests/` folder
+- [x] **Task 1.1.2.4**: Create a symlink to Obsidian plugins folder for local testing with instructions in README
 
 ### Task 1.1.3: Create settings module
-- [ ] **Task 1.1.3.1**: Define the `PluginSettings` interface in `settings.ts` with required fields:
+- [x] **Task 1.1.3.1**: Define the `PluginSettings` interface in `settings.ts` with required fields:
   ```typescript
   interface PluginSettings {
     apiKey: string;
@@ -27,9 +27,14 @@ This document breaks down each task into granular, AI-codable subtasks with spec
     debug: boolean; // Added based on architecture doc
   }
   ```
-- [ ] **Task 1.1.3.2**: Implement settings storage using Obsidian's data API and plugin data interface
-- [ ] **Task 1.1.3.3**: Create settings tab UI with input fields for LLM configuration (API key, endpoint URL)
-- [ ] **Task 1.1.3.4**: Add validation logic for API endpoints and keys to prevent runtime errors
+- [x] **Task 1.1.3.2**: Implement settings storage using Obsidian's data API and plugin data interface
+- [x] **Task 1.1.3.3**: Create settings tab UI with input fields for LLM configuration (API key, endpoint URL)
+- [x] **Task 1.1.3.4**: Add validation logic for API endpoints and keys to prevent runtime errors
+
+### Task 1.1.4: Activate and Display settings Tab
+This task wires the previous work done to create the ImporterSettingsTab in main.ts, replacing the default settings from the template to be able to display the implemented settings page
+- [x] **Task 1.1.4.1**: Show ImporterSettingsTab in the plugin
+
 
 ## URL Input and Content Detection
 
