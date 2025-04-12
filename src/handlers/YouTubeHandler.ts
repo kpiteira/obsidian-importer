@@ -1,3 +1,4 @@
+import { extractYouTubeVideoId, generateYouTubeEmbedHtml } from "../utils/youtube";
 import { ContentTypeHandler } from "./ContentTypeHandler";
 import { fetchYouTubeTranscript } from "../services/YouTubeTranscriptService";
 import { YouTubeVideoData } from "../models/YouTubeVideoData";
@@ -30,8 +31,7 @@ export class YouTubeHandler implements ContentTypeHandler, IContentHandler {
    */
   async downloadContent(url: string): Promise<{ content: string; metadata: YouTubeVideoData }> {
     // Extract videoId
-    const videoIdMatch = url.match(/[?&]v=([\w-]{11})/) || url.match(/youtu\.be\/([\w-]{11})/);
-    const videoId = videoIdMatch ? videoIdMatch[1] : undefined;
+    const videoId = extractYouTubeVideoId(url);
     if (!videoId) {
       throw new Error("Invalid YouTube URL: cannot extract video ID");
     }
@@ -58,7 +58,7 @@ export class YouTubeHandler implements ContentTypeHandler, IContentHandler {
     const thumbnailUrl = getMeta("image") || "";
     const providerName = getMeta("site_name") || "YouTube";
     const providerUrl = "https://www.youtube.com";
-    const htmlEmbed = getMeta("video:url") ? `<iframe width=\"560\" height=\"315\" src=\"https://www.youtube.com/embed/${videoId}\" frameborder=\"0\" allowfullscreen></iframe>` : "";
+    const htmlEmbed = getMeta("video:url") ? generateYouTubeEmbedHtml(videoId) : "";
     const width = 560;
     const height = 315;
     const version = "1.0";

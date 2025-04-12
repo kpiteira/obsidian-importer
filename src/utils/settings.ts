@@ -8,30 +8,11 @@ export interface PluginSettings {
 
 export const DEFAULT_SETTINGS: PluginSettings = {
   apiKey: "",
-  llmEndpoint: "REQUESTY_DEFAULT_URL",
-  model: "gpt-3.5-turbo",
-  defaultFolder: "Imported/YouTube",
+  llmEndpoint: "https://router.requesty.io/v1/chat/completions",
+  model: "google/gemini-2.0-flash-exp",
+  defaultFolder: "Sources/YouTube",
   debug: false,
 };
-
-/**
- * Validates that a string is a valid HTTP(S) URL and not localhost/loopback.
- */
-export function isValidUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    if (
-      parsed.hostname === "localhost" ||
-      parsed.hostname.startsWith("127.") ||
-      parsed.hostname.startsWith("::1")
-    ) {
-      return false;
-    }
-    return ["http:", "https:"].includes(parsed.protocol);
-  } catch (e) {
-    return false;
-  }
-}
 
 /**
  * Loads plugin settings using Obsidian's data API, merging with DEFAULT_SETTINGS.

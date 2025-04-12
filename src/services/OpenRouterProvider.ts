@@ -1,5 +1,5 @@
 import { LLMProvider, LLMInput } from "./LLMProvider";
-import { retryWithExponentialBackoff, isTransientError } from "./retryWithExponentialBackoff";
+import { retryWithExponentialBackoff, isTransientError } from "../utils/retryWithExponentialBackoff";
 import { redactApiKey } from "../utils/redact";
 import { getLogger } from "../utils/importerLogger";
 import { requestUrl, RequestUrlResponse } from "obsidian";

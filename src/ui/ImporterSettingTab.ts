@@ -1,5 +1,6 @@
 import { App, Plugin, PluginSettingTab, Setting } from 'obsidian';
-import { PluginSettings, saveSettings, isValidUrl } from '../utils/settings';
+import { PluginSettings, saveSettings } from '../utils/settings';
+import { isValidUrl } from '../utils/url';
 import { getLogger } from '../utils/importerLogger';
 
 export class ImporterSettingTab extends PluginSettingTab {

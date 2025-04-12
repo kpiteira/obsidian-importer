@@ -1,4 +1,4 @@
-import { extractYouTubeVideoId } from "../utils/url";
+import { extractYouTubeVideoId } from "../utils/youtube";
 import { requestUrl, RequestUrlResponse } from "obsidian";
 import { getLogger } from "../utils/importerLogger";
 /**
