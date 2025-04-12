@@ -4,11 +4,18 @@
 // Provides info, warn, error, debug methods.
 // Do NOT log sensitive data (e.g., API keys).
 
+import { DEFAULT_SETTINGS } from "./settings";
+
 export type ImporterLoggerOptions = {
   debug: boolean;
   pluginName?: string; // Defaults to "ObsidianImporter"
 };
 
+/**
+ * Singleton/factory for ImporterLogger.
+ * Use getLogger() to access the shared logger instance.
+ * The debug flag is initialized from settings and can be updated at runtime.
+ */
 export class ImporterLogger {
   private debug: boolean;
   private readonly prefix: string;
@@ -62,10 +69,27 @@ export class ImporterLogger {
   }
 }
 
+// Singleton instance
+let loggerInstance: ImporterLogger | null = null;
+
+/**
+ * Returns the shared ImporterLogger instance.
+ * The debug flag is initialized from DEFAULT_SETTINGS.debug.
+ * To update the debug flag at runtime (e.g., when settings change), call getLogger().setDebugMode(newDebugValue).
+ */
+export function getLogger(): ImporterLogger {
+  if (!loggerInstance) {
+    loggerInstance = new ImporterLogger({ debug: DEFAULT_SETTINGS.debug });
+  }
+  return loggerInstance;
+}
 // Example usage:
-// import { ImporterLogger } from "./importerLogger";
-// const logger = new ImporterLogger({ debug: settings.debug });
+// import { getLogger } from "./importerLogger";
+// const logger = getLogger();
 // logger.info("Import started");
 // logger.warn("Potential issue");
 // logger.error("An error occurred", err);
+// logger.debugLog("Detailed debug info", data);
+// // To update debug mode at runtime:
+// logger.setDebugMode(newDebugValue);
 // logger.debugLog("Detailed debug info", data);

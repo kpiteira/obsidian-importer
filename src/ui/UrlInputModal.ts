@@ -9,11 +9,11 @@ import { ImportPipelineOrchestrator, ImportPipelineDependencies, ImportPipelineP
  */
 export class UrlInputModal extends Modal {
   private errorEl: HTMLElement | null = null;
-  private orchestratorDeps: ImportPipelineDependencies;
+  private onSubmit: (url: string) => void;
 
-  constructor(app: App, orchestratorDeps: ImportPipelineDependencies) {
+  constructor(app: App, onSubmit: (url: string) => void) {
     super(app);
-    this.orchestratorDeps = orchestratorDeps;
+    this.onSubmit = onSubmit;
   }
 
   onOpen() {
@@ -54,7 +54,7 @@ export class UrlInputModal extends Modal {
       inputEl.focus();
     }, 0);
 
-    // Handle Enter key: validate URL, then run orchestrator
+    // Handle Enter key: validate URL, then call onSubmit
     inputEl.addEventListener('keydown', (event: KeyboardEvent) => {
       if (event.key === 'Enter') {
         const urlStr = inputEl.value.trim();
@@ -70,59 +70,9 @@ export class UrlInputModal extends Modal {
           return;
         }
 
-        // Instantiate orchestrator and wire up UI
-        const orchestrator = new ImportPipelineOrchestrator(this.orchestratorDeps);
-
-        orchestrator.onProgress((progress: ImportPipelineProgress) => {
-          // Always clear error state on progress
-          this.clearError();
-          ribbonEl.classList.remove('obsidian-importer-detection-ribbon-success', 'obsidian-importer-detection-ribbon-error');
-          switch (progress.stage) {
-            case 'validating_url':
-              ribbonEl.textContent = 'Checking link...';
-              ribbonEl.style.display = '';
-              break;
-            case 'detecting_content_type':
-              ribbonEl.textContent = 'Analyzing link...';
-              ribbonEl.style.display = '';
-              break;
-            case 'downloading_content':
-              ribbonEl.textContent = 'Getting content...';
-              ribbonEl.style.display = '';
-              break;
-            case 'processing_with_llm':
-              ribbonEl.textContent = 'Summarizing...';
-              ribbonEl.style.display = '';
-              break;
-            case 'writing_note':
-              ribbonEl.textContent = 'Saving note...';
-              ribbonEl.style.display = '';
-              break;
-            case 'completed':
-              ribbonEl.textContent = 'Import complete!';
-              ribbonEl.style.display = '';
-              ribbonEl.classList.add('obsidian-importer-detection-ribbon-success');
-              ribbonEl.classList.remove('obsidian-importer-detection-ribbon-error');
-              new Notice('Import complete! Note created at: ' + progress.notePath);
-              this.close();
-              break;
-          }
-        });
-
-        orchestrator.onError((error: ImportPipelineError) => {
-          // Show a clear, actionable error and mark ribbon as error
-          this.showError(error.userMessage || 'Something went wrong during import.');
-          ribbonEl.textContent = (error.userMessage && !error.userMessage.endsWith('.'))
-            ? error.userMessage + '.'
-            : (error.userMessage || 'Unknown error');
-          ribbonEl.textContent = 'Import failed: ' + ribbonEl.textContent;
-          ribbonEl.style.display = '';
-          ribbonEl.classList.remove('obsidian-importer-detection-ribbon-success');
-          ribbonEl.classList.add('obsidian-importer-detection-ribbon-error');
-          new Notice('Import failed: ' + (error.userMessage || 'Unknown error'));
-        });
-
-        orchestrator.run(urlStr);
+        // Delegate import to the provided callback
+        this.onSubmit(urlStr);
+        this.close();
       }
     });
   }

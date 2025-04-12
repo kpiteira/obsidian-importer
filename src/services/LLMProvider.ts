@@ -18,15 +18,13 @@ export interface LLMInput {
  */
 export interface LLMProvider {
   /**
-   * Calls the LLM with the given input, API key, and prompt template.
+   * Calls the LLM with the given input and API key.
    * @param input Structured input for the LLM (e.g., transcript, metadata).
    * @param apiKey API key for authenticating with the LLM provider.
-   * @param promptTemplate The prompt template to use for the LLM call.
    * @returns Promise resolving to the raw LLM response (Markdown).
    */
   callLLM(
     input: LLMInput,
-    apiKey: string,
-    promptTemplate: string
+    apiKey: string
   ): Promise<string>;
 }

@@ -1,3 +1,4 @@
+import { getLogger } from "../utils/importerLogger";
 /**
  * ImportPipelineOrchestrator
  * Encapsulates the import pipeline: URL validation → content type detection → content/metadata download → LLM processing → note generation.
@@ -32,6 +33,11 @@ export interface IContentTypeDetector {
 
 export interface IContentHandler {
   downloadContent(url: string): Promise<any>;
+  /**
+   * Returns the folder name for this content type, given the metadata.
+   * @param metadata The metadata object returned from downloadContent
+   */
+  getFolderName(metadata: any): string;
 }
 
 export interface ILLMProcessor {
@@ -39,7 +45,14 @@ export interface ILLMProcessor {
 }
 
 export interface INoteWriter {
-  writeNote(content: string, metadata?: any): Promise<string>;
+  /**
+   * Pure file writer: writes the note to the specified folder and filename.
+   * @param folderPath Folder path (relative to vault root)
+   * @param filename Note filename (should be sanitized and unique)
+   * @param content Markdown content for the note (including frontmatter if needed)
+   * @returns The full note path (folderPath/filename)
+   */
+  writeNote(folderPath: string, filename: string, content: string): Promise<string>;
 }
 
 export interface ImportPipelineDependencies {
@@ -79,12 +92,10 @@ export class ImportPipelineOrchestrator {
 
   private emitError(error: ImportPipelineError) {
     for (const cb of this.errorCallbacks) cb(error);
-    if (this.deps.logger) {
-      this.deps.logger.error(
-        `[ImportPipelineOrchestrator] Error at stage "${error.stage}": ${error.userMessage}`,
-        error.error
-      );
-    }
+    getLogger().error(
+      `[ImportPipelineOrchestrator] Error at stage "${error.stage}": ${error.userMessage}`,
+      error.error
+    );
   }
 
   /**
@@ -96,6 +107,67 @@ export class ImportPipelineOrchestrator {
    * to ensure robust error isolation, user-friendly error mapping, and detailed logging.
    * All errors are propagated to the UI via error events/callbacks with actionable messages.
    */
+  // --- Utility functions for filename/frontmatter generation (moved from noteWriter) ---
+  /**
+   * Generates a note filename based on the title, with a date prefix (YYYY-MM-DD) and sanitized title.
+   * @param title The note title
+   * @param date Optional Date object (defaults to today)
+   * @returns The generated filename (e.g., "2025-04-11 My Video Title.md")
+   */
+  private generateNoteFilename(title: string, date: Date = new Date()): string {
+    const datePrefix = date.toISOString().slice(0, 10); // YYYY-MM-DD
+    const sanitizedTitle = (title || "Untitled").replace(/[\\/:*?"<>|]/g, ""); // fallback sanitize
+    return `${datePrefix} ${sanitizedTitle}.md`;
+  }
+
+  /**
+   * Generates YAML frontmatter for a note, including videoId, url, and importTimestamp.
+   * @param videoId The YouTube video ID
+   * @param url The original video URL
+   * @param importTimestamp The import timestamp (Date or ISO string)
+   * @returns YAML frontmatter string for inclusion at the top of a Markdown note
+   */
+  private generateNoteFrontmatter(videoId: string, url: string, importTimestamp: Date | string): string {
+    const isoTimestamp = importTimestamp instanceof Date
+      ? importTimestamp.toISOString()
+      : new Date(importTimestamp).toISOString();
+    return [
+      '---',
+      `videoId: ${videoId}`,
+      `url: ${url}`,
+      `importTimestamp: ${isoTimestamp}`,
+      '---'
+    ].join('\n');
+  }
+
+  /**
+   * Resolves filename conflicts by generating a unique, sanitized filename.
+   * - If the desired filename exists in the target directory, appends a number (e.g., " (1)", " (2)") before the extension.
+   * - If all numbered variants up to 99 exist, appends a timestamp.
+   * - Always preserves the ".md" extension and uses sanitizeFilename for the base name.
+   * @param desiredFilename The proposed filename (with or without ".md")
+   * @param existingFilenames Array of filenames already present in the target directory (should include ".md")
+   * @returns A unique, sanitized filename string (with ".md" extension)
+   */
+  private resolveFilenameConflict(desiredFilename: string, existingFilenames: string[]): string {
+    let base = desiredFilename.endsWith('.md')
+      ? desiredFilename.slice(0, -3)
+      : desiredFilename;
+    base = (base || "Untitled").replace(/[\\/:*?"<>|]/g, "");
+    let candidate = `${base}.md`;
+    if (!existingFilenames.includes(candidate)) {
+      return candidate;
+    }
+    for (let i = 1; i <= 99; i++) {
+      const numbered = `${base} (${i}).md`;
+      if (!existingFilenames.includes(numbered)) {
+        return numbered;
+      }
+    }
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    return `${base} (${timestamp}).md`;
+  }
+
   async run(url: string): Promise<void> {
     const logger = this.deps.logger;
     let contentType: string | undefined;
@@ -105,15 +177,11 @@ export class ImportPipelineOrchestrator {
     let noteContent: string;
     let notePath: string;
 
-    logger?.info?.("Starting import pipeline for URL:", url);
-
     // 1. URL Validation
     this.emitProgress({ stage: 'validating_url' });
-    logger?.debugLog?.("Validating URL:", url);
     try {
       await this.deps.urlValidator.validate(url);
     } catch (err: any) {
-      // Map known error types to user-friendly messages
       let userMessage = "Invalid or unsupported URL.";
       if (err?.userMessage) userMessage = err.userMessage;
       else if (err?.name === "NetworkError") userMessage = "Network error during URL validation.";
@@ -129,10 +197,8 @@ export class ImportPipelineOrchestrator {
 
     // 2. Content Type Detection
     this.emitProgress({ stage: 'detecting_content_type' });
-    logger?.debugLog?.("Detecting content type for URL:", url);
     try {
       contentType = await this.deps.contentTypeDetector.detect(url);
-      logger?.info?.("Detected content type:", contentType);
     } catch (err: any) {
       let userMessage = "Could not determine the content type for the provided URL.";
       if (err?.userMessage) userMessage = err.userMessage;
@@ -161,9 +227,7 @@ export class ImportPipelineOrchestrator {
 
     // 3. Content Download
     this.emitProgress({ stage: 'downloading_content' });
-    logger?.debugLog?.("Downloading content for URL:", url, "with handler:", contentType);
     try {
-      // Do not log actual content or sensitive metadata!
       const result = await handler.downloadContent(url);
       content = result.content;
       metadata = result.metadata;
@@ -184,9 +248,7 @@ export class ImportPipelineOrchestrator {
 
     // 4. LLM Processing
     this.emitProgress({ stage: 'processing_with_llm' });
-    logger?.debugLog?.("Processing content with LLM for URL:", url, "contentType:", contentType);
     try {
-      // Do not log content or metadata
       noteContent = await this.deps.llmProcessor.process(content, metadata);
     } catch (err: any) {
       let userMessage = "AI processing failed. Please try again later.";
@@ -202,11 +264,31 @@ export class ImportPipelineOrchestrator {
       return;
     }
 
-    // 5. Note Writing
+    // 5. Note Writing (all orchestration logic here)
     this.emitProgress({ stage: 'writing_note' });
-    logger?.debugLog?.("Writing note for URL:", url, "contentType:", contentType);
     try {
-      notePath = await this.deps.noteWriter.writeNote(noteContent, metadata);
+      // 5.1 Determine folder path from handler
+      const folderPath = handler.getFolderName(metadata);
+
+      // 5.2 Generate filename using note title and date
+      const title = metadata?.title || "Imported Note";
+      const date = metadata?.importTimestamp ? new Date(metadata.importTimestamp) : new Date();
+      let filename = this.generateNoteFilename(title, date);
+
+      // 5.3 TODO: Optionally resolve filename conflicts (requires reading existing files in folder)
+      // For now, assume filename is unique
+
+      // 5.4 Generate YAML frontmatter/metadata
+      const videoId = metadata?.videoId || "";
+      const importUrl = url;
+      const importTimestamp = date;
+      const frontmatter = this.generateNoteFrontmatter(videoId, importUrl, importTimestamp);
+
+      // 5.5 Assemble final note content (frontmatter + body)
+      const finalContent = `${frontmatter}\n\n${noteContent}`;
+
+      // 5.6 Write note using pure file writer
+      notePath = await this.deps.noteWriter.writeNote(folderPath, filename, finalContent);
     } catch (err: any) {
       let userMessage = "Failed to write the note to your vault. Please check your file system permissions.";
       if (err?.userMessage) userMessage = err.userMessage;
@@ -224,6 +306,5 @@ export class ImportPipelineOrchestrator {
 
     // 6. Completed
     this.emitProgress({ stage: 'completed', notePath });
-    logger?.info?.("Import pipeline completed for URL:", url, "Note path:", notePath);
   }
 }

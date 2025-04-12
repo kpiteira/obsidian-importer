@@ -1,3 +1,5 @@
+import { getLogger } from "../utils/importerLogger";
+
 export interface LLMOutput {
   summary: string;
   keyPoints: string[];
@@ -9,45 +11,50 @@ export interface LLMOutput {
  * Returns an LLMOutput object. Handles missing or malformed sections gracefully.
  */
 export function parseLLMResponse(markdown: string): LLMOutput {
-  // Helper to extract section content by heading
-  function extractSection(heading: string): string {
-    // Match heading (e.g., "## Summary") at start of line, case-insensitive
-    const pattern = new RegExp(`^##\\s*${heading}\\s*\\n([\\s\\S]*?)(?=^##\\s|\\Z)`, 'im');
-    const match = markdown.match(pattern);
-    return match ? match[1].trim() : '';
-  }
-
-  // Helper to parse a Markdown list into array of strings
-  function parseList(section: string): string[] {
-    if (!section) return [];
-    // Match lines starting with -, *, or numbered lists
-    const lines = section.split('\n');
-    const items: string[] = [];
-    for (const line of lines) {
-      const itemMatch = line.match(/^\s*(?:[-*]|\d+\.)\s+(.*)$/);
-      if (itemMatch && itemMatch[1].trim()) {
-        items.push(itemMatch[1].trim());
-      }
+  try {
+    // Helper to extract section content by heading
+    function extractSection(heading: string): string {
+      // Match heading (e.g., "## Summary") at start of line, case-insensitive
+      const pattern = new RegExp(`^##\\s*${heading}\\s*\\n([\\s\\S]*?)(?=^##\\s|\\Z)`, 'im');
+      const match = markdown.match(pattern);
+      return match ? match[1].trim() : '';
     }
-    // If no list items found, but section is non-empty, treat as single item if it's a single line
-    if (items.length === 0 && section.trim()) {
-      // If section is a single line, treat as one item
-      if (lines.length === 1) {
-        items.push(section.trim());
+
+    // Helper to parse a Markdown list into array of strings
+    function parseList(section: string): string[] {
+      if (!section) return [];
+      // Match lines starting with -, *, or numbered lists
+      const lines = section.split('\n');
+      const items: string[] = [];
+      for (const line of lines) {
+        const itemMatch = line.match(/^\s*(?:[-*]|\d+\.)\s+(.*)$/);
+        if (itemMatch && itemMatch[1].trim()) {
+          items.push(itemMatch[1].trim());
+        }
       }
+      // If no list items found, but section is non-empty, treat as single item if it's a single line
+      if (items.length === 0 && section.trim()) {
+        // If section is a single line, treat as one item
+        if (lines.length === 1) {
+          items.push(section.trim());
+        }
+      }
+      return items;
     }
-    return items;
+
+    const summarySection = extractSection('Summary');
+    const keyPointsSection = extractSection('Key Points');
+    const keyConceptsSection = extractSection('Key Concepts');
+
+    return {
+      summary: summarySection,
+      keyPoints: parseList(keyPointsSection),
+      keyConcepts: parseList(keyConceptsSection),
+    };
+  } catch (err) {
+    getLogger().error("LLM response parsing error", err);
+    throw err;
   }
-
-  const summarySection = extractSection('Summary');
-  const keyPointsSection = extractSection('Key Points');
-  const keyConceptsSection = extractSection('Key Concepts');
-
-  return {
-    summary: summarySection,
-    keyPoints: parseList(keyPointsSection),
-    keyConcepts: parseList(keyConceptsSection),
-  };
 }
 
 /**

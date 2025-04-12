@@ -1,5 +1,6 @@
 import { extractYouTubeVideoId } from "../utils/url";
 import { requestUrl, RequestUrlResponse } from "obsidian";
+import { getLogger } from "../utils/importerLogger";
 /**
  * Custom error for YouTube transcript fetching failures.
  */
@@ -60,7 +61,6 @@ export async function fetchYouTubeTranscript(url: string): Promise<string> {
     const videoPageBody = videoPageResponse.text;
 
     // LOG: Show first 200 chars of video page body for debugging
-    console.log("[YouTubeTranscriptService] videoPageBody (first 200):", videoPageBody.slice(0, 200));
 
     // Try multiple regexes for ytInitialPlayerResponse extraction
     let playerResponseMatch =
@@ -75,8 +75,6 @@ export async function fetchYouTubeTranscript(url: string): Promise<string> {
         "PLAYER_RESPONSE_NOT_FOUND",
         "Failed to extract player response from video page."
       );
-    } else {
-      console.log("[YouTubeTranscriptService] ytInitialPlayerResponse found, preview:", playerResponseMatch[1].slice(0, 100));
     }
 
     let playerResponse: any;
@@ -94,7 +92,6 @@ export async function fetchYouTubeTranscript(url: string): Promise<string> {
     const captionTracks =
       playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
     // LOG: Output captionTracks for debugging
-    console.log("[YouTubeTranscriptService] captionTracks:", JSON.stringify(captionTracks, null, 2));
 
     if (!captionTracks) {
       console.error("[YouTubeTranscriptService] No captionTracks found in player response");
@@ -129,7 +126,6 @@ export async function fetchYouTubeTranscript(url: string): Promise<string> {
     let captionsResponse: RequestUrlResponse;
     try {
       // LOG: Output the captionsUrl being fetched
-      console.log("[YouTubeTranscriptService] Fetching captionsUrl:", captionsUrl);
       captionsResponse = await requestUrl({ url: captionsUrl });
     } catch (err) {
       throw new YouTubeTranscriptError(
@@ -182,9 +178,9 @@ export async function fetchYouTubeTranscript(url: string): Promise<string> {
         // Node/Obsidian fallback
         return html
           .replace(/&amp;/g, "&")
-          .replace(/&lt;/g, "<")
-          .replace(/&gt;/g, ">")
-          .replace(/&quot;/g, '"')
+          .replace(/</g, "<")
+          .replace(/>/g, ">")
+          .replace(/"/g, '"')
           .replace(/&#39;/g, "'")
           .replace(/&#10;/g, "\n")
           .replace(/&#39;/g, "'")
@@ -210,4 +206,64 @@ export async function fetchYouTubeTranscript(url: string): Promise<string> {
       err?.message || "Unknown error occurred while fetching YouTube transcript."
     );
   }
+}
+
+/**
+ * Extracts the transcript from a YouTube video page HTML.
+ * @param html The HTML of the YouTube video page.
+ * @returns The transcript as plain text.
+ */
+export async function extractTranscriptFromHtml(html: string): Promise<string> {
+   // Try multiple regexes for ytInitialPlayerResponse extraction
+  let playerResponseMatch =
+    html.match(/var ytInitialPlayerResponse = (.*?});/) ||
+    html.match(/ytInitialPlayerResponse\\s*=\\s*(\\{.*?\\});/) ||
+    html.match(/window\\["ytInitialPlayerResponse"\\]\\s*=\\s*(\\{.*?\\});/);
+
+  if (!playerResponseMatch) {
+    throw new Error("PLAYER_RESPONSE_NOT_FOUND: Failed to extract player response from video page.");
+  }
+
+  let playerResponse: any;
+  try {
+    playerResponse = JSON.parse(playerResponseMatch[1]);
+  } catch (err) {
+    throw new Error("PLAYER_RESPONSE_PARSE_ERROR: Failed to parse player response JSON.");
+  }
+
+  const captionTracks =
+    playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
+
+  if (!captionTracks || !captionTracks.length) {
+    throw new Error("NO_CAPTIONS: No captions available for this video.");
+  }
+
+  // Prefer English, otherwise fallback to first available
+  const track =
+    captionTracks.find((t: any) => t.languageCode === "en") ||
+    captionTracks[0];
+
+  if (!track || !track.baseUrl) {
+    throw new Error("NO_CAPTION_TRACKS: No valid caption track found.");
+  }
+
+  const captionsUrl = track.baseUrl;
+
+  // Fetch the captions XML
+  const captionsResponse = await requestUrl({ url: captionsUrl });
+  const xml = captionsResponse.text;
+
+  // Parse XML for transcript text
+  const matches = Array.from(xml.matchAll(/<text[^>]*>(.*?)<\/text>/gs));
+  const transcript = matches.map((m) => decodeHTMLEntitiesSimple(m[1])).join(" ");
+  return transcript;
+}
+
+function decodeHTMLEntitiesSimple(text: string): string {
+  return text.replace(/&amp;/g, "&")
+    .replace(/</g, "<")
+    .replace(/>/g, ">")
+    .replace(/"/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ");
 }

@@ -3,7 +3,6 @@ export interface PluginSettings {
   llmEndpoint: string;
   model: string;
   defaultFolder: string;
-  promptTemplate: string;
   debug: boolean;
 }
 
@@ -12,7 +11,6 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   llmEndpoint: "REQUESTY_DEFAULT_URL",
   model: "gpt-3.5-turbo",
   defaultFolder: "Imported/YouTube",
-  promptTemplate: "",
   debug: false,
 };
 

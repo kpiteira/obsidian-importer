@@ -1,5 +1,6 @@
 import { App, Plugin, PluginSettingTab, Setting } from 'obsidian';
 import { PluginSettings, saveSettings, isValidUrl } from '../utils/settings';
+import { getLogger } from '../utils/importerLogger';
 
 export class ImporterSettingTab extends PluginSettingTab {
   plugin: Plugin & { settings: PluginSettings; saveSettings: () => Promise<void> };
@@ -140,21 +141,10 @@ export class ImporterSettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             this.plugin.settings.debug = value;
             await this.plugin.saveSettings();
+            console.log('Setting Debug mode:', value);
+            getLogger().setDebugMode(value);
           })
       );
 
-    // Prompt Template Override
-    new Setting(containerEl)
-      .setName('Prompt Template Override')
-      .setDesc('Override the default prompt template for LLM requests.')
-      .addTextArea(textarea =>
-        textarea
-          .setPlaceholder('Enter prompt template...')
-          .setValue(this.plugin.settings.promptTemplate)
-          .onChange(async (value) => {
-            this.plugin.settings.promptTemplate = value;
-            await this.plugin.saveSettings();
-          })
-      );
   }
 }

@@ -59,6 +59,8 @@ Create a concise yet comprehensive summary of the video based on the provided su
 ` + "```" + `
 
 Note: Include all sections. If there are no technical terms, omit that section entirely.
+
+Subtitles: {{transcript}}
 `;
 
 /**

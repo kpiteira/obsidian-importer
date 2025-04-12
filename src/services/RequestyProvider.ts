@@ -1,23 +1,23 @@
 import { LLMProvider, LLMInput } from "./LLMProvider";
 import { retryWithExponentialBackoff, isTransientError } from "./retryWithExponentialBackoff";
 import { redactApiKey } from "../utils/redact";
+import { requestUrl, RequestUrlResponse } from "obsidian";
+import { getLogger } from "../utils/importerLogger";
+import { get } from "http";
+
 
 /**
  * RequestyProvider implements the LLMProvider interface for the Requesty API.
  * Handles API call logic, error handling, and timeout management.
  */
 export class RequestyProvider implements LLMProvider {
-  private endpoint: string;
-  private model: string;
-  private timeoutMs: number;
+  private getSettings: () => { endpoint: string; model: string; timeoutMs: number };
 
   /**
-   * @param options Optional configuration: { endpoint, model, timeoutMs }
+   * @param getSettings Function that returns the latest { endpoint, model, timeoutMs }
    */
-  constructor(options?: { endpoint?: string; model?: string; timeoutMs?: number }) {
-    this.endpoint = options?.endpoint ?? "https://api.requesty.ai/v1/chat/completions";
-    this.model = options?.model ?? "google/gemini-2.0-flash-exp";
-    this.timeoutMs = options?.timeoutMs ?? 30000; // default 30s
+  constructor(getSettings: () => { endpoint: string; model: string; timeoutMs: number }) {
+    this.getSettings = getSettings;
   }
 
   /**
@@ -33,18 +33,23 @@ export class RequestyProvider implements LLMProvider {
    * Calls the Requesty LLM API.
    * @param input Structured input for the LLM.
    * @param apiKey API key for Requesty.
-   * @param promptTemplate The prompt template to use.
    * @returns Promise resolving to the raw LLM response (Markdown).
    */
   async callLLM(
     input: LLMInput,
-    apiKey: string,
-    promptTemplate: string
+    apiKey: string
   ): Promise<string> {
-    const prompt = this.renderPrompt(promptTemplate, input);
+    // Fetch latest settings dynamically
+    const { endpoint, model, timeoutMs } = this.getSettings();
 
+    // Use the code-defined default prompt template
+    // Import at top: import { DEFAULT_YOUTUBE_PROMPT_TEMPLATE } from "./llmPrompts";
+    // (If not already imported, add it.)
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { DEFAULT_YOUTUBE_PROMPT_TEMPLATE } = require("./llmPrompts");
+    const prompt = this.renderPrompt(DEFAULT_YOUTUBE_PROMPT_TEMPLATE, input);
     const body = {
-      model: this.model,
+      model,
       messages: [
         {
           role: "user",
@@ -54,27 +59,29 @@ export class RequestyProvider implements LLMProvider {
     };
 
     const doApiCall = async (): Promise<string> => {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-
+      // Use Obsidian's requestUrl to bypass CORS restrictions in the desktop app.
+      // Timeout is handled by racing the request against a timeout Promise.
       try {
-        const response = await fetch(this.endpoint, {
+        const responsePromise = requestUrl({
+          url: endpoint,
           method: "POST",
           headers: {
             "Authorization": `Bearer ${apiKey}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify(body),
-          signal: controller.signal,
+          contentType: "application/json",
         });
-
-        clearTimeout(timeout);
-
-        if (!response.ok) {
-          let errorMsg = `Requesty API error: ${response.status} ${response.statusText}`;
+        // Timeout logic: race the request against a timeout
+        const timeoutPromise = new Promise<RequestUrlResponse>((_, reject) =>
+          setTimeout(() => reject(new Error(`Requesty API request timed out after ${timeoutMs / 1000} seconds.`)), timeoutMs)
+        );
+        const response = await Promise.race([responsePromise, timeoutPromise]) as RequestUrlResponse;
+        if (response.status < 200 || response.status >= 300) {
+          let errorMsg = `Requesty API error: ${response.status}`;
           // Try to extract error details from response body if available
           try {
-            const errorData = await response.json();
+            const errorData = response.json ? await response.json : JSON.parse(response.text);
             if (errorData && errorData.error && errorData.error.message) {
               errorMsg += ` - ${errorData.error.message}`;
             }
@@ -84,7 +91,8 @@ export class RequestyProvider implements LLMProvider {
           throw new Error(redactApiKey(errorMsg, apiKey));
         }
 
-        const data = await response.json();
+        // Parse response JSON
+        const data = response.json ? await response.json : JSON.parse(response.text);
         if (
           !data ||
           !data.choices ||
@@ -95,11 +103,11 @@ export class RequestyProvider implements LLMProvider {
         ) {
           throw new Error(redactApiKey("Invalid response format from Requesty API.", apiKey));
         }
-
+  
         return data.choices[0].message.content;
       } catch (err: any) {
-        if (err.name === "AbortError") {
-          throw new Error(redactApiKey(`Requesty API request timed out after ${this.timeoutMs / 1000} seconds.`, apiKey));
+        if (err.message && err.message.includes("timed out")) {
+          throw new Error(redactApiKey(err.message, apiKey));
         }
         // Do not include apiKey in error messages
         throw new Error(
@@ -108,8 +116,6 @@ export class RequestyProvider implements LLMProvider {
             apiKey
           )
         );
-      } finally {
-        clearTimeout(timeout);
       }
     };
 

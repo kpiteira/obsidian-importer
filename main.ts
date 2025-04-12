@@ -1,71 +1,10 @@
 import { Plugin, App } from 'obsidian';
 import { ImporterSettingTab } from './src/ui/ImporterSettingTab';
-import { PluginSettings, DEFAULT_SETTINGS, loadSettings as loadPluginSettings, saveSettings as savePluginSettings } from './src/utils/settings';
+import { PluginSettings, loadSettings as loadPluginSettings, saveSettings as savePluginSettings } from './src/utils/settings';
 import { UrlInputModal } from './src/ui/UrlInputModal';
-import { ImportPipelineOrchestrator, ImportPipelineDependencies, IUrlValidator, IContentTypeDetector, IContentHandler, ILLMProcessor, INoteWriter } from './src/orchestrator/ImportPipelineOrchestrator';
-import { isValidExternalUrl } from './src/utils/url';
-import { detectContentType } from './src/handlers/typeDispatcher';
-import { YouTubeHandler } from './src/handlers/YouTubeHandler';
-import { LLMProvider } from './src/services/LLMProvider';
-import { RequestyProvider } from './src/services/RequestyProvider';
-import { createNoteWithFeedback, generateNoteFilename } from './src/utils/noteWriter';
-import { ImporterLogger } from './src/utils/importerLogger';
+import { ImportPipelineOrchestrator } from './src/orchestrator/ImportPipelineOrchestrator';
+import { getLogger } from "./src/utils/importerLogger";
 
-// Simple IUrlValidator implementation
-class SimpleUrlValidator implements IUrlValidator {
-  async validate(url: string): Promise<void> {
-    if (!isValidExternalUrl(url)) {
-      throw new Error('Invalid or unsupported URL.');
-    }
-  }
-}
-
-// Simple IContentTypeDetector implementation
-class SimpleContentTypeDetector implements IContentTypeDetector {
-  async detect(url: string): Promise<string> {
-    const handler = detectContentType(new URL(url));
-    if (!handler) throw new Error('Unsupported content type.');
-    return handler.type;
-  }
-}
-
-// IContentHandler implementation for YouTube
-class YouTubeContentHandler implements IContentHandler {
-  async downloadContent(url: string): Promise<{ content: any; metadata: any }> {
-    // For demonstration, just return the URL as content and metadata.
-    // In a real implementation, fetch video/transcript/metadata here.
-    return { content: url, metadata: { url } };
-  }
-}
-
-// ILLMProcessor adapter for OpenRouterProvider
-class LLMProcessorAdapter implements ILLMProcessor {
-  private provider: LLMProvider;
-  constructor(provider: LLMProvider) {
-    this.provider = provider;
-  }
-  async process(content: any, metadata?: any): Promise<string> {
-    // For demonstration, just return the content as a string.
-    // In a real implementation, call the provider's LLM API.
-    if (typeof content === 'string') return content;
-    return JSON.stringify(content);
-  }
-}
-
-// INoteWriter wrapper for createNoteWithFeedback
-class ObsidianNoteWriter implements INoteWriter {
-  private app: App;
-  constructor(app: App) {
-    this.app = app;
-  }
-  async writeNote(content: string, metadata?: any): Promise<string> {
-    // Use metadata to determine folder/filename, or use defaults
-    const folderPath = (metadata && metadata.folderPath) || 'Imported';
-    const filename = (metadata && metadata.filename) || generateNoteFilename('Imported Note');
-    await createNoteWithFeedback(this.app, folderPath, filename, content);
-    return `${folderPath}/${filename}`;
-  }
-}
 
 export default class MyPlugin extends Plugin {
   settings: PluginSettings;
@@ -74,30 +13,86 @@ export default class MyPlugin extends Plugin {
     await this.loadSettings();
 
     // Instantiate the logger with debug mode from settings
-    const logger = new ImporterLogger({
-      debug: this.settings.debug,
-      pluginName: "ObsidianImporter"
-    });
+    const logger = getLogger();
+    logger.setDebugMode(this.settings.debug);
 
-    // Construct orchestrator dependencies
-    const orchestratorDeps: ImportPipelineDependencies = {
+    // --- Dependency wiring for orchestrator ---
+    class SimpleUrlValidator {
+      async validate(url: string): Promise<void> {
+        const { isValidExternalUrl } = await import('./src/utils/url');
+        if (!isValidExternalUrl(url)) {
+          throw new Error('Invalid or unsupported URL.');
+        }
+      }
+    }
+    class SimpleContentTypeDetector {
+      async detect(url: string): Promise<string> {
+        const { detectContentType } = await import('./src/handlers/typeDispatcher');
+        const handler = detectContentType(new URL(url));
+        if (!handler) throw new Error('Unsupported content type.');
+        return handler.type;
+      }
+    }
+    class LLMProcessorAdapter {
+      private provider: any;
+      private settings: any;
+      constructor(provider: any, settings: any) {
+        this.provider = provider;
+        this.settings = settings;
+      }
+      async process(content: any, metadata?: any): Promise<string> {
+        const { parseLLMResponse } = await import('./src/services/llmResponseParser');
+        const llmInput = {
+          content: typeof content === 'string' ? content : JSON.stringify(content),
+          ...(metadata && typeof metadata === 'object' ? metadata : {})
+        };
+        const { apiKey } = this.settings;
+        if (!apiKey) throw new Error('LLM API key is missing in settings.');
+        const markdown = await this.provider.callLLM(llmInput, apiKey);
+        parseLLMResponse(markdown);
+        return markdown;
+      }
+    }
+    class ObsidianNoteWriter {
+      private noteWriter: any;
+      constructor(app: App) {
+        const { NoteWriter } = require('./src/utils/noteWriter');
+        this.noteWriter = new NoteWriter(app);
+      }
+      async writeNote(folderPath: string, filename: string, content: string): Promise<string> {
+        return await this.noteWriter.writeNote(folderPath, filename, content);
+      }
+    }
+    const { YouTubeHandler } = await import('./src/handlers/YouTubeHandler');
+    const { RequestyProvider } = await import('./src/services/RequestyProvider');
+
+    const orchestrator = new ImportPipelineOrchestrator({
       urlValidator: new SimpleUrlValidator(),
       contentTypeDetector: new SimpleContentTypeDetector(),
       contentHandlers: {
-        youtube: new YouTubeContentHandler()
+        youtube: new YouTubeHandler()
       },
-      llmProcessor: new LLMProcessorAdapter(new RequestyProvider()),
+      llmProcessor: new LLMProcessorAdapter(
+        new RequestyProvider(() => ({
+          endpoint: this.settings.llmEndpoint,
+          model: this.settings.model,
+          timeoutMs: 60000
+        })),
+        this.settings
+      ),
       noteWriter: new ObsidianNoteWriter(this.app),
       logger
-    };
+    });
 
     this.addCommand({
       id: 'open-url-input-modal',
       name: 'Import from URL...',
       callback: () => {
-        new UrlInputModal(this.app, orchestratorDeps).open();
+        // Open the modal and delegate import to orchestrator.run()
+        new UrlInputModal(this.app, (url: string) => orchestrator.run(url)).open();
       }
     });
+    // Optionally, add other commands that delegate to orchestrator as needed.
 
     this.addSettingTab(new ImporterSettingTab(this.app, this));
   }
@@ -106,6 +101,8 @@ export default class MyPlugin extends Plugin {
 
   async loadSettings() {
     this.settings = await loadPluginSettings(this);
+    // Log API key presence (not value)
+    getLogger().setDebugMode(this.settings.debug);
   }
 
   async saveSettings() {
