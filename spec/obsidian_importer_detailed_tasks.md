@@ -55,16 +55,16 @@ This task wires the previous work done to create the ImporterSettingsTab in main
 ## YouTube Content Processing
 
 ### Task 1.3.1: Implement YouTube metadata extraction
-- [ ] **Task 1.3.1.1**: Create function to extract video ID from various YouTube URL formats (full URL, shortened URL, with timestamps)
-- [ ] **Task 1.3.1.2**: Implement metadata fetching using YouTube oEmbed API (`https://www.youtube.com/oembed?url=...&format=json`)
-- [ ] **Task 1.3.1.3**: Define `YouTubeVideoData` interface with fields: videoId, title, author, thumbnailUrl, etc.
-- [ ] **Task 1.3.1.4**: Add error handling for failed metadata fetches with appropriate fallbacks
+- [x] **Task 1.3.1.1**: Create function to extract video ID from various YouTube URL formats (full URL, shortened URL, with timestamps) and use it when a valid YouTube video URL is entered in the modal
+- [x] **Task 1.3.1.2**: Implement metadata fetching using YouTube oEmbed API (`https://www.youtube.com/oembed?url=...&format=json`)
+- [x] **Task 1.3.1.3**: Define `YouTubeVideoData` interface with fields: videoId, title, author, thumbnailUrl, etc.
+- [x] **Task 1.3.1.4**: Add error handling for failed metadata fetches with appropriate fallbacks
 
 ### Task 1.3.2: Implement transcript fetching
-- [ ] **Task 1.3.2.1**: Research and implement transcript fetching function based on obsidian-yt-video-summarizer approach
-- [ ] **Task 1.3.2.2**: Implement transcript fetching with proper error handling for unavailable transcripts
-- [ ] **Task 1.3.2.3**: Add support for handling videos without transcripts (error message or metadata-only note)
-- [ ] **Task 1.3.2.4**: Create unit tests with mock responses for reliable testing of transcript parsing
+- [x] **Task 1.3.2.1**: Research and implement transcript fetching function based on obsidian-yt-video-summarizer approach
+- [x] **Task 1.3.2.2**: Implement transcript fetching with proper error handling for unavailable transcripts
+- [x] **Task 1.3.2.3**: Add support for handling videos without transcripts (error message or metadata-only note)
+- [x] **Task 1.3.2.4**: Create unit tests with mock responses for reliable testing of transcript parsing
 
 ## LLM Processing
 
