@@ -1,20 +1,20 @@
-import { Modal, App } from 'obsidian';
-import { isValidExternalUrl, extractYouTubeVideoId } from '../utils/url';
-import { fetchYouTubeTranscript, YouTubeTranscriptError } from '../services/YouTubeTranscriptService';
-import { detectContentType } from '../handlers/typeDispatcher';
-import type { YouTubeVideoData } from '../models/YouTubeVideoData';
+import { Modal, App, Notice } from 'obsidian';
+import { isValidExternalUrl } from '../utils/url';
+import { ImportPipelineOrchestrator, ImportPipelineDependencies, ImportPipelineProgress, ImportPipelineError } from '../orchestrator/ImportPipelineOrchestrator';
+
 /**
  * UrlInputModal
  * A modal for entering a URL, following Obsidian's modal UI conventions.
- * (Input fields and logic will be added in later tasks.)
+ * Refactored to delegate all import pipeline logic to ImportPipelineOrchestrator.
  */
 export class UrlInputModal extends Modal {
   private errorEl: HTMLElement | null = null;
+  private orchestratorDeps: ImportPipelineDependencies;
 
-  constructor(app: App) {
+  constructor(app: App, orchestratorDeps: ImportPipelineDependencies) {
     super(app);
+    this.orchestratorDeps = orchestratorDeps;
   }
-  private youtubeMetadata: YouTubeVideoData | null = null;
 
   onOpen() {
     const { contentEl, titleEl } = this;
@@ -30,7 +30,7 @@ export class UrlInputModal extends Modal {
       attr: { placeholder: 'Paste or type a URL...' }
     });
 
-    // Detection ribbon element (hidden by default)
+    // Progress ribbon element (hidden by default)
     const ribbonEl = contentEl.createEl('div', {
       cls: 'obsidian-importer-detection-ribbon',
       text: ''
@@ -54,89 +54,75 @@ export class UrlInputModal extends Modal {
       inputEl.focus();
     }, 0);
 
-    // Handle Enter key: validate URL, detect content type, and show ribbon or error
+    // Handle Enter key: validate URL, then run orchestrator
     inputEl.addEventListener('keydown', (event: KeyboardEvent) => {
       if (event.key === 'Enter') {
         const urlStr = inputEl.value.trim();
+
+        // Always reset ribbon and error state at the start of a new import
         ribbonEl.style.display = 'none';
         ribbonEl.textContent = '';
+        ribbonEl.classList.remove('obsidian-importer-detection-ribbon-success', 'obsidian-importer-detection-ribbon-error');
+        this.clearError();
+
         if (!isValidExternalUrl(urlStr)) {
           this.showError('Please enter a valid, public URL (no localhost or private IPs).');
-        } else {
-          this.clearError();
-          let url: URL;
-          try {
-            url = new URL(urlStr);
-          } catch {
-            this.showError('Invalid URL format.');
-            return;
-          }
-          const handler = detectContentType(url);
-          if (handler) {
-            let videoId: string | null = null;
-            if (handler.type === 'youtube') {
-              videoId = extractYouTubeVideoId(urlStr);
-            }
-            ribbonEl.textContent = `Detected: ${handler.type === 'youtube' ? 'YouTube video' : handler.type}` +
-              (videoId ? ` (ID: ${videoId})` : '');
-              // Fetch YouTube oEmbed metadata with error handling
-              this.fetchYouTubeOEmbed(urlStr)
-                .then(async metadata => {
-                  this.youtubeMetadata = metadata;
-                  this.clearError();
-                  ribbonEl.textContent = `YouTube: ${metadata.title}`;
-                  ribbonEl.style.display = '';
-                  ribbonEl.classList.toggle('obsidian-importer-detection-ribbon-success', true);
-                  ribbonEl.classList.toggle('obsidian-importer-detection-ribbon-error', false);
-
-                  // Attempt to fetch transcript
-                  try {
-                    const transcript = await fetchYouTubeTranscript(urlStr);
-                    this.youtubeMetadata = { ...metadata, transcript };
-                    // Extract first line of transcript and update ribbon
-                    const firstLine = transcript.split('\n').find(line => line.trim().length > 0) ?? '';
-                    ribbonEl.textContent = `YouTube: ${metadata.title} — ${firstLine}`;
-                    // Proceed with full note creation (not implemented here)
-                    // e.g., this.createNoteWithTranscript(this.youtubeMetadata);
-                  } catch (err) {
-                    if (err instanceof YouTubeTranscriptError) {
-                      // Option 1: Show error message to user
-                      this.showError(
-                        "No transcript available for this video. A metadata-only note can be created."
-                      );
-                      // Option 2: Prepare metadata-only note (transcript omitted)
-                      this.youtubeMetadata = { ...metadata, transcript: undefined };
-                      // Optionally, trigger metadata-only note creation here
-                      // e.g., this.createMetadataOnlyNote(this.youtubeMetadata);
-                    } else {
-                      this.showError(
-                        err instanceof Error ? err.message : "Unknown error while fetching transcript."
-                      );
-                    }
-                  }
-                })
-                .catch((err) => {
-                  this.youtubeMetadata = null;
-                  this.showError(
-                    typeof err === "string"
-                      ? err
-                      : (err instanceof Error ? err.message : "Failed to fetch YouTube video metadata. Please check the URL or try again later.")
-                  );
-                  ribbonEl.textContent = "Failed to fetch YouTube video metadata.";
-                  ribbonEl.style.display = '';
-                  ribbonEl.classList.toggle('obsidian-importer-detection-ribbon-success', false);
-                  ribbonEl.classList.toggle('obsidian-importer-detection-ribbon-error', true);
-                });
-            ribbonEl.style.display = '';
-            ribbonEl.classList.toggle('obsidian-importer-detection-ribbon-success', true);
-            ribbonEl.classList.toggle('obsidian-importer-detection-ribbon-error', false);
-          } else {
-            ribbonEl.textContent = 'Unsupported content type. Only YouTube videos are currently supported.';
-            ribbonEl.style.display = '';
-            ribbonEl.classList.toggle('obsidian-importer-detection-ribbon-success', false);
-            ribbonEl.classList.toggle('obsidian-importer-detection-ribbon-error', true);
-          }
+          return;
         }
+
+        // Instantiate orchestrator and wire up UI
+        const orchestrator = new ImportPipelineOrchestrator(this.orchestratorDeps);
+
+        orchestrator.onProgress((progress: ImportPipelineProgress) => {
+          // Always clear error state on progress
+          this.clearError();
+          ribbonEl.classList.remove('obsidian-importer-detection-ribbon-success', 'obsidian-importer-detection-ribbon-error');
+          switch (progress.stage) {
+            case 'validating_url':
+              ribbonEl.textContent = 'Checking link...';
+              ribbonEl.style.display = '';
+              break;
+            case 'detecting_content_type':
+              ribbonEl.textContent = 'Analyzing link...';
+              ribbonEl.style.display = '';
+              break;
+            case 'downloading_content':
+              ribbonEl.textContent = 'Getting content...';
+              ribbonEl.style.display = '';
+              break;
+            case 'processing_with_llm':
+              ribbonEl.textContent = 'Summarizing...';
+              ribbonEl.style.display = '';
+              break;
+            case 'writing_note':
+              ribbonEl.textContent = 'Saving note...';
+              ribbonEl.style.display = '';
+              break;
+            case 'completed':
+              ribbonEl.textContent = 'Import complete!';
+              ribbonEl.style.display = '';
+              ribbonEl.classList.add('obsidian-importer-detection-ribbon-success');
+              ribbonEl.classList.remove('obsidian-importer-detection-ribbon-error');
+              new Notice('Import complete! Note created at: ' + progress.notePath);
+              this.close();
+              break;
+          }
+        });
+
+        orchestrator.onError((error: ImportPipelineError) => {
+          // Show a clear, actionable error and mark ribbon as error
+          this.showError(error.userMessage || 'Something went wrong during import.');
+          ribbonEl.textContent = (error.userMessage && !error.userMessage.endsWith('.'))
+            ? error.userMessage + '.'
+            : (error.userMessage || 'Unknown error');
+          ribbonEl.textContent = 'Import failed: ' + ribbonEl.textContent;
+          ribbonEl.style.display = '';
+          ribbonEl.classList.remove('obsidian-importer-detection-ribbon-success');
+          ribbonEl.classList.add('obsidian-importer-detection-ribbon-error');
+          new Notice('Import failed: ' + (error.userMessage || 'Unknown error'));
+        });
+
+        orchestrator.run(urlStr);
       }
     });
   }
@@ -156,59 +142,12 @@ export class UrlInputModal extends Modal {
     }
   }
 
-  /**
-   * Fetch YouTube oEmbed metadata for a given video URL.
-   * Only fetches, no error handling or interface typing per requirements.
-   */
-  private async fetchYouTubeOEmbed(url: string): Promise<YouTubeVideoData> {
-    const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
-    let response: Response;
-    try {
-      response = await fetch(oembedUrl);
-    } catch (err) {
-      throw new Error("Network error while fetching YouTube metadata.");
-    }
-    if (!response.ok) {
-      throw new Error(`YouTube oEmbed API error: ${response.status} ${response.statusText}`);
-    }
-    let data: any;
-    try {
-      data = await response.json();
-    } catch (err) {
-      throw new Error("Invalid response from YouTube oEmbed API.");
-    }
-    // Validate required fields
-    const requiredFields = [
-      "title", "author_name", "author_url", "thumbnail_url", "thumbnail_width",
-      "thumbnail_height", "provider_name", "provider_url", "html", "width", "height", "version", "type"
-    ];
-    for (const field of requiredFields) {
-      if (!(field in data)) {
-        throw new Error(`Missing field in YouTube oEmbed response: ${field}`);
-      }
-    }
-    return {
-      videoId: extractYouTubeVideoId(url) ?? "",
-      title: data.title,
-      author: data.author_name,
-      authorUrl: data.author_url,
-      thumbnailUrl: data.thumbnail_url,
-      thumbnailWidth: data.thumbnail_width,
-      thumbnailHeight: data.thumbnail_height,
-      providerName: data.provider_name,
-      providerUrl: data.provider_url,
-      html: data.html,
-      width: data.width,
-      height: data.height,
-      version: data.version,
-      type: data.type,
-    };
-  }
-
-
   onClose() {
     const { contentEl } = this;
     contentEl.empty();
     this.errorEl = null;
+    // Defensive: ensure no progress ribbon or error is left visible
+    // (in case modal is closed before pipeline completes)
+    // This is safe because contentEl is emptied above.
   }
 }

@@ -69,49 +69,49 @@ This task wires the previous work done to create the ImporterSettingsTab in main
 ## LLM Processing
 
 ### Task 1.4.1: Implement LLM service
-- [ ] **Task 1.4.1.1**: Create `LLMProvider` interface to abstract different LLM providers (OpenRouter, Requesty)
-- [ ] **Task 1.4.1.2**: Implement API call function with proper error handling and timeout management
-- [ ] **Task 1.4.1.3**: Add retry logic for transient API failures (exponential backoff, max 3 attempts)
-- [ ] **Task 1.4.1.4**: Create secure API key handling with redaction in logs and error messages
+- [x] **Task 1.4.1.1**: Create `LLMProvider` interface to abstract different LLM providers (OpenRouter, Requesty)
+- [x] **Task 1.4.1.2**: Implement API call function with proper error handling and timeout management
+- [x] **Task 1.4.1.3**: Add retry logic for transient API failures (exponential backoff, max 3 attempts)
+- [x] **Task 1.4.1.4**: Create secure API key handling with redaction in logs and error messages
 
 ### Task 1.4.2: Implement prompt management
-- [ ] **Task 1.4.2.1**: Define default YouTube prompt template in constants file with instructions for summary, key points, concepts extraction
-- [ ] **Task 1.4.2.2**: Create template rendering function to replace placeholders with transcript and metadata
-- [ ] **Task 1.4.2.3**: Implement the `parseLLMResponse` function (as outlined in Architecture 2.4).
+- [x] **Task 1.4.2.1**: Define default YouTube prompt template in constants file with instructions for summary, key points, concepts extraction
+- [x] **Task 1.4.2.2**: Create template rendering function to replace placeholders with transcript and metadata
+- [x] **Task 1.4.2.3**: Implement the `parseLLMResponse` function (as outlined in Architecture 2.4).
     - Input: Raw Markdown string from LLM.
     - Logic: Use regex or string splitting to find `## Summary`, `## Key Points`, `## Key Concepts` headings.
     - Extract the content under each heading.
     - Handle cases where headings might be missing.
     - Return an `LLMOutput` object (defined in Architecture 2.4).
-- [ ] **Task 1.4.2.4**: Add validation for LLM output format to handle unexpected response structures
+- [x] **Task 1.4.2.4**: Add validation for LLM output format to handle unexpected response structures
 
 ## Note Generation
 
 ### Task 1.5.1: Implement note creation
-- [ ] **Task 1.5.1.1**: Create function to generate final Markdown content using YouTube template and LLM output
-- [ ] **Task 1.5.1.2**: Implement folder structure creation for organized notes (sources/videos/, etc.)
-- [ ] **Task 1.5.1.3**: Add file path sanitization to prevent invalid characters in filenames
-- [ ] **Task 1.5.1.4**: Create proper error handling for file system operations with user feedback
+- [x] **Task 1.5.1.1**: Create function to generate final Markdown content using YouTube template and LLM output
+- [x] **Task 1.5.1.2**: Implement folder structure creation for organized notes (sources/videos/, etc.)
+- [x] **Task 1.5.1.3**: Add file path sanitization to prevent invalid characters in filenames
+- [x] **Task 1.5.1.4**: Create proper error handling for file system operations with user feedback
 
 ### Task 1.5.2: Add note metadata and linking
-- [ ] **Task 1.5.2.1**: Implement filename generation based on video title with date prefix
-- [ ] **Task 1.5.2.2**: Add YAML frontmatter with video ID, URL, and import timestamp
-- [ ] **Task 1.5.2.3**: Create success notification with link to the newly created note using Obsidian Notice
-- [ ] **Task 1.5.2.4**: Implement conflict resolution for duplicate note names (append number or timestamp)
+- [x] **Task 1.5.2.1**: Implement filename generation based on video title with date prefix
+- [x] **Task 1.5.2.2**: Add YAML frontmatter with video ID, URL, and import timestamp
+- [x] **Task 1.5.2.3**: Create success notification with link to the newly created note using Obsidian Notice
+- [x] **Task 1.5.2.4**: Implement conflict resolution for duplicate note names (append number or timestamp)
 
 ## Main Plugin Integration
 
 ### Task 1.6.1: Connect pipeline components
-- [ ] **Task 1.6.1.1**: Implement main handler function to orchestrate the entire pipeline from URL to note
-- [ ] **Task 1.6.1.2**: Add command palette registration with proper name and icon
-- [ ] **Task 1.6.1.3**: Create proper error boundaries between pipeline stages with graceful failure handling
-- [ ] **Task 1.6.1.4**: Implement progress indication for long-running operations using Obsidian Notice
+- [x] **Task 1.6.1.1**: Implement main handler function to orchestrate the entire pipeline from URL to note
+- [x] **Task 1.6.1.2**: Add command palette registration with proper name and icon
+- [x] **Task 1.6.1.3**: Create proper error boundaries between pipeline stages with graceful failure handling
+- [x] **Task 1.6.1.4**: Implement progress indication for long-running operations using Obsidian Notice
 
 ### Task 1.6.2: Add logging and diagnostics
-- [ ] **Task 1.6.2.1**: Implement consistent logging pattern with plugin name prefix
-- [ ] **Task 1.6.2.2**: Add debug mode toggle in settings to control verbose logging
-- [ ] **Task 1.6.2.3**: Create user-friendly error messages for common failures (API errors, transcript unavailable)
-- [ ] **Task 1.6.2.4**: Implement detailed console logging for troubleshooting without exposing sensitive data
+- [x] **Task 1.6.2.1**: Implement consistent logging pattern with plugin name prefix
+- [x] **Task 1.6.2.2**: Add debug mode toggle in settings to control verbose logging
+- [x] **Task 1.6.2.3**: Create user-friendly error messages for common failures (API errors, transcript unavailable)
+- [x] **Task 1.6.2.4**: Implement detailed console logging for troubleshooting without exposing sensitive data
 
 ## Testing and Quality Assurance
 

@@ -17,3 +17,32 @@ export class YouTubeHandler implements ContentTypeHandler {
     );
   }
 }
+/**
+ * Generates the final Markdown content for a YouTube note using the LLM output and the YouTube template.
+ * @param output The parsed LLM output containing summary, keyPoints, and keyConcepts.
+ * @returns The formatted Markdown string for the note.
+ */
+export function generateYouTubeNoteMarkdown(output: {
+  summary: string;
+  keyPoints: string[];
+  keyConcepts: string[];
+}): string {
+  const keyPointsSection = output.keyPoints && output.keyPoints.length
+    ? output.keyPoints.map(point => point.startsWith('-') ? point : `- ${point}`).join('\n')
+    : '';
+  const keyConceptsSection = output.keyConcepts && output.keyConcepts.length
+    ? output.keyConcepts.map(concept => concept.startsWith('-') ? concept : `- ${concept}`).join('\n')
+    : '';
+
+  return [
+    '## Summary',
+    output.summary.trim(),
+    '',
+    '## Key Points',
+    keyPointsSection,
+    '',
+    '## Key Concepts',
+    keyConceptsSection
+  ].join('\n');
+}
+
