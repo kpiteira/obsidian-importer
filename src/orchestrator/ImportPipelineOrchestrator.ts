@@ -27,22 +27,26 @@ export interface IUrlValidator {
   validate(url: string): Promise<void>;
 }
 
-export interface IContentTypeDetector {
-  detect(url: string): Promise<string>;
+import { ContentTypeHandler } from "../handlers/ContentTypeHandler";
+import { detectContentType } from "../handlers/typeDispatcher";
+
+/**
+ * Interface for a minimal LLM provider that takes a prompt and returns the LLM's markdown response.
+ */
+export interface LLMProvider {
+  processPrompt(prompt: string): Promise<string>;
 }
 
-export interface IContentHandler {
-  downloadContent(url: string): Promise<any>;
-  /**
-   * Returns the folder name for this content type, given the metadata.
-   * @param metadata The metadata object returned from downloadContent
-   */
-  getFolderName(metadata: any): string;
+/**
+ * Interface for a content downloader, responsible for fetching content and metadata for a given URL.
+ */
+export interface ContentDownloader {
+  downloadContent(url: string): Promise<{ content: any; metadata: any }>;
 }
 
-export interface ILLMProcessor {
-  process(content: any, metadata?: any): Promise<string>;
-}
+/**
+ * Interface for note writing.
+ */
 
 export interface INoteWriter {
   /**
@@ -57,9 +61,8 @@ export interface INoteWriter {
 
 export interface ImportPipelineDependencies {
   urlValidator: IUrlValidator;
-  contentTypeDetector: IContentTypeDetector;
-  contentHandlers: Record<string, IContentHandler>;
-  llmProcessor: ILLMProcessor;
+  contentDownloader: ContentDownloader;
+  llmProvider: LLMProvider;
   noteWriter: INoteWriter;
   logger?: {
     info: (...args: unknown[]) => void;
@@ -168,12 +171,28 @@ export class ImportPipelineOrchestrator {
     return `${base} (${timestamp}).md`;
   }
 
+  /**
+   * Runs the import pipeline for a given URL.
+   * Emits progress and error events.
+   *
+   * Pipeline stages:
+   * 1. URL validation
+   * 2. Handler selection (by content type or URL)
+   * 3. Content download
+   * 4. LLM prompt generation and processing
+   * 5. LLM response parsing
+   * 6. Note writing
+   *
+   * Each content type handler is responsible for prompt construction and LLM response parsing.
+   */
   async run(url: string): Promise<void> {
     const logger = this.deps.logger;
-    let contentType: string | undefined;
-    let handler: IContentHandler | undefined;
+    let handler: ContentTypeHandler | null;
     let content: any;
     let metadata: any;
+    let llmPrompt: string;
+    let llmRawResponse: string;
+    let llmParsed: any;
     let noteContent: string;
     let notePath: string;
 
@@ -195,10 +214,21 @@ export class ImportPipelineOrchestrator {
       return;
     }
 
-    // 2. Content Type Detection
+    // 2. Handler Selection (Content Type Detection)
     this.emitProgress({ stage: 'detecting_content_type' });
     try {
-      contentType = await this.deps.contentTypeDetector.detect(url);
+      const urlObj = new URL(url);
+      handler = detectContentType(urlObj);
+      if (!handler) {
+        logger?.warn?.("No handler found for URL:", url);
+        const userMessage = `Unsupported or unrecognized content type for URL: ${url}`;
+        this.emitError({
+          stage: "detecting_content_type",
+          userMessage,
+          error: { userMessage }
+        });
+        return;
+      }
     } catch (err: any) {
       let userMessage = "Could not determine the content type for the provided URL.";
       if (err?.userMessage) userMessage = err.userMessage;
@@ -213,22 +243,10 @@ export class ImportPipelineOrchestrator {
       return;
     }
 
-    handler = this.deps.contentHandlers[contentType];
-    if (!handler) {
-      logger?.warn?.("No handler found for content type:", contentType);
-      const userMessage = `Unsupported content type: ${contentType}`;
-      this.emitError({
-        stage: "detecting_content_type",
-        userMessage,
-        error: { userMessage }
-      });
-      return;
-    }
-
     // 3. Content Download
     this.emitProgress({ stage: 'downloading_content' });
     try {
-      const result = await handler.downloadContent(url);
+      const result = await this.deps.contentDownloader.downloadContent(url);
       content = result.content;
       metadata = result.metadata;
     } catch (err: any) {
@@ -246,10 +264,13 @@ export class ImportPipelineOrchestrator {
       return;
     }
 
-    // 4. LLM Processing
+    // 4. LLM Prompt Generation and Processing
     this.emitProgress({ stage: 'processing_with_llm' });
     try {
-      noteContent = await this.deps.llmProcessor.process(content, metadata);
+      llmPrompt = handler.getPrompt(metadata);
+      llmRawResponse = await this.deps.llmProvider.processPrompt(llmPrompt);
+      llmParsed = handler.parseLLMResponse(llmRawResponse);
+      noteContent = typeof llmParsed === "string" ? llmParsed : JSON.stringify(llmParsed, null, 2);
     } catch (err: any) {
       let userMessage = "AI processing failed. Please try again later.";
       if (err?.userMessage) userMessage = err.userMessage;
@@ -264,11 +285,13 @@ export class ImportPipelineOrchestrator {
       return;
     }
 
-    // 5. Note Writing (all orchestration logic here)
+    // 5. Note Writing
     this.emitProgress({ stage: 'writing_note' });
     try {
-      // 5.1 Determine folder path from handler
-      const folderPath = handler.getFolderName(metadata);
+      // 5.1 Determine folder path from handler (if available)
+      const folderPath = typeof (handler as any).getFolderName === "function"
+        ? (handler as any).getFolderName(metadata)
+        : "Imported Notes";
 
       // 5.2 Generate filename using note title and date
       const title = metadata?.title || "Imported Note";

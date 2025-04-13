@@ -1,12 +1,8 @@
 /**
- * LLMInput is a placeholder type representing the structured input
- * to be sent to the LLM. Replace or extend this definition as needed.
+ * Generalized (empty) LLM output interface. Extend for specific use cases.
  */
-export interface LLMInput {
-  // Example fields; extend as required for your use case
-  content: string;
-  [key: string]: any;
-}
+export interface LLMOutput {}
+
 
 /**
  * LLMProvider abstracts interaction with different LLM APIs.
@@ -24,7 +20,7 @@ export interface LLMProvider {
    * @returns Promise resolving to the raw LLM response (Markdown).
    */
   callLLM(
-    input: LLMInput,
+    prompt: string,
     apiKey: string
   ): Promise<string>;
 }

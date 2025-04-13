@@ -1,3 +1,5 @@
+// Mock the Obsidian API for all tests in this file. See tests/__mocks__/obsidian.ts for details.
+vi.mock('obsidian');
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import * as urlUtils from "../../src/utils/url";
 import { fetchYouTubeTranscript, YouTubeTranscriptError, YouTubeTranscriptErrorCode } from "../../src/services/YouTubeTranscriptService";

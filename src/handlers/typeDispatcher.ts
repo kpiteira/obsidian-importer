@@ -2,17 +2,27 @@ import { ContentTypeHandler } from "./ContentTypeHandler";
 import { YouTubeHandler } from "./YouTubeHandler";
 
 /**
- * List of all available content type handlers.
- * Add new handlers to this array as needed.
+ * Central registry and dispatcher for all available content type handlers.
+ *
+ * - Handlers must implement the ContentTypeHandler interface.
+ * - To add support for a new content type, implement ContentTypeHandler and add an instance to the handlers array.
+ * - The dispatcher selects the appropriate handler for a given URL using handler.detect(url).
  */
 const handlers: ContentTypeHandler[] = [
   new YouTubeHandler(),
 ];
 
 /**
- * Finds the first handler that can handle the given URL.
- * @param url The URL to check
- * @returns The matching handler, or null if none found
+ * Selects the appropriate ContentTypeHandler for a given URL.
+ *
+ * @param url The URL to check.
+ * @returns The first matching handler, or null if none found.
+ *
+ * Usage:
+ *   const handler = detectContentType(new URL("https://youtube.com/..."));
+ *   if (handler) {
+ *     // Use handler.getPrompt, handler.parseLLMResponse, etc.
+ *   }
  */
 export function detectContentType(url: URL): ContentTypeHandler | null {
   for (const handler of handlers) {
