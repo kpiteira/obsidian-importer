@@ -12,12 +12,18 @@ import { get } from "http";
  */
 export class RequestyProvider implements LLMProvider {
   private getSettings: () => { endpoint: string; model: string; timeoutMs: number };
+  private apiKey: string;
 
   /**
    * @param getSettings Function that returns the latest { endpoint, model, timeoutMs }
+   * @param apiKey API key for Requesty
    */
-  constructor(getSettings: () => { endpoint: string; model: string; timeoutMs: number }) {
+  constructor(
+    getSettings: () => { endpoint: string; model: string; timeoutMs: number },
+    apiKey: string
+  ) {
     this.getSettings = getSettings;
+    this.apiKey = apiKey;
   }
 
 
@@ -28,8 +34,7 @@ export class RequestyProvider implements LLMProvider {
    * @returns Promise resolving to the raw LLM response (Markdown).
    */
   async callLLM(
-    prompt: string,
-    apiKey: string
+    prompt: string
   ): Promise<string> {
     // Fetch latest settings dynamically
     const { endpoint, model, timeoutMs } = this.getSettings();
@@ -50,7 +55,7 @@ export class RequestyProvider implements LLMProvider {
           url: endpoint,
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${apiKey}`,
+            "Authorization": `Bearer ${this.apiKey}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify(body),
@@ -70,7 +75,7 @@ export class RequestyProvider implements LLMProvider {
           } catch {
             // Ignore JSON parse errors
           }
-          throw new Error(redactApiKey(errorMsg, apiKey));
+          throw new Error(redactApiKey(errorMsg, this.apiKey));
         }
 
         const data = response.json ? await response.json : JSON.parse(response.text);
@@ -82,17 +87,17 @@ export class RequestyProvider implements LLMProvider {
           !data.choices[0].message ||
           typeof data.choices[0].message.content !== "string"
         ) {
-          throw new Error(redactApiKey("Invalid response format from Requesty API.", apiKey));
+          throw new Error(redactApiKey("Invalid response format from Requesty API.", this.apiKey));
         }
         return data.choices[0].message.content;
       } catch (err: any) {
         if (err.message && err.message.includes("timed out")) {
-          throw new Error(redactApiKey(err.message, apiKey));
+          throw new Error(redactApiKey(err.message, this.apiKey));
         }
         throw new Error(
           redactApiKey(
             `Failed to call Requesty API: ${err && err.message ? err.message : String(err)}`,
-            apiKey
+            this.apiKey
           )
         );
       }

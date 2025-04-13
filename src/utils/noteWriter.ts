@@ -1,4 +1,5 @@
 import { Notice, App } from "obsidian";
+import { INoteWriter } from "../orchestrator/ImportPipelineOrchestrator";
 
 /**
  * Pure file writer for notes in the Obsidian vault.
@@ -8,7 +9,7 @@ import { Notice, App } from "obsidian";
  *
  * @param app Obsidian App instance
  */
-export class NoteWriter {
+export class NoteWriter implements INoteWriter {
   private app: App;
   constructor(app: App) {
     this.app = app;

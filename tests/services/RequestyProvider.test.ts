@@ -30,15 +30,15 @@ describe('RequestyProvider', () => {
       };
     }) as any;
 
-    const provider = new RequestyProvider(getSettings);
+    const provider = new RequestyProvider(getSettings, 'test-api-key');
 
     // First call uses settings1
-    await provider.callLLM('test prompt', 'test-api-key');
+    await provider.callLLM('test prompt');
     expect(getSettings).toHaveBeenCalledTimes(1);
     expect((globalThis.fetch as any).mock.calls[0][0]).toBe(settings1.endpoint);
 
     // Second call uses settings2
-    await provider.callLLM('test prompt 2', 'test-api-key');
+    await provider.callLLM('test prompt 2');
     expect(getSettings).toHaveBeenCalledTimes(2);
     expect((globalThis.fetch as any).mock.calls[1][0]).toBe(settings2.endpoint);
   });
@@ -56,9 +56,9 @@ describe('RequestyProvider', () => {
       json: async () => ({ result: 'ok' }),
     })) as any;
 
-    const provider = new RequestyProvider(getSettings);
+    const provider = new RequestyProvider(getSettings, 'test-api-key');
 
-    await provider.callLLM('first', 'test-api-key');
+    await provider.callLLM('first');
     expect(getSettings).toHaveBeenCalledTimes(1);
 
     // Change settings at runtime
@@ -68,7 +68,7 @@ describe('RequestyProvider', () => {
       timeoutMs: 5000,
     };
 
-    await provider.callLLM('second', 'test-api-key');
+    await provider.callLLM('second');
     expect(getSettings).toHaveBeenCalledTimes(2);
     expect((globalThis.fetch as any).mock.calls[1][0]).toBe('https://api.changed.com');
   });

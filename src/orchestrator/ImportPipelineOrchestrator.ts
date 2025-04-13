@@ -34,7 +34,7 @@ import { detectContentType } from "../handlers/typeDispatcher";
  * Interface for a minimal LLM provider that takes a prompt and returns the LLM's markdown response.
  */
 export interface LLMProvider {
-  processPrompt(prompt: string): Promise<string>;
+  callLLM(prompt: string): Promise<string>;
 }
 
 /**
@@ -268,7 +268,7 @@ export class ImportPipelineOrchestrator {
     this.emitProgress({ stage: 'processing_with_llm' });
     try {
       llmPrompt = handler.getPrompt(metadata);
-      llmRawResponse = await this.deps.llmProvider.processPrompt(llmPrompt);
+      llmRawResponse = await this.deps.llmProvider.callLLM(llmPrompt);
       llmParsed = handler.parseLLMResponse(llmRawResponse);
       noteContent = typeof llmParsed === "string" ? llmParsed : JSON.stringify(llmParsed, null, 2);
     } catch (err: any) {
