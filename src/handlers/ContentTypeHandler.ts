@@ -4,6 +4,10 @@
  */
 import { LLMOutput } from "../services/LLMProvider";
 
+export interface ContentMetadata {
+  title: string;
+}
+
 export interface ContentTypeHandler {
   /**
    * The unique type string for this handler (e.g., "youtube").
@@ -25,7 +29,7 @@ export interface ContentTypeHandler {
    * @param metadata Arbitrary metadata required to construct the prompt (e.g., video title, transcript).
    * @returns The prompt string to send to the LLM.
    */
-  getPrompt(metadata: any): string;
+  getPrompt(metadata: ContentMetadata): string;
 
   /**
    * Parses the LLM's markdown response into a structured output for this content type.
@@ -41,6 +45,25 @@ export interface ContentTypeHandler {
    * @param output The LLM output object to validate.
    */
   validateLLMOutput(output: LLMOutput): true;
+  /**
+   * Downloads the content and metadata for the given URL.
+   * @param url The URL to download content from.
+   * @returns An object containing the content and metadata.
+   */
+  download(url: string): Promise<{ content: any; metadata: ContentMetadata }>;
+
+  /**
+   * 
+   * @param markdown The markdown string returned by the LLM.
+   * @param metadata The metadata generated during the download process.
+   * @returns The note content to be written to the file.
+   */
+  getNoteContent(markdown: string, metadata: ContentMetadata): string;
+
+  /**
+   * Returns the folder name for YouTube notes.
+   */
+  getFolderName(): string
 }
 
 /**

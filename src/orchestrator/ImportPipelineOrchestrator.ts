@@ -1,4 +1,10 @@
 import { getLogger } from "../utils/importerLogger";
+import { ContentTypeHandler } from "../handlers/ContentTypeHandler";
+import { detectContentType } from "../handlers/typeDispatcher";
+import { PluginSettings } from "../utils/settings";
+import { sanitizeFilename } from "../utils/sanitize";
+
+
 /**
  * ImportPipelineOrchestrator
  * Encapsulates the import pipeline: URL validation → content type detection → content/metadata download → LLM processing → note generation.
@@ -23,13 +29,6 @@ export type ImportPipelineError = {
 export type ProgressCallback = (progress: ImportPipelineProgress) => void;
 export type ErrorCallback = (error: ImportPipelineError) => void;
 
-export interface IUrlValidator {
-  validate(url: string): Promise<void>;
-}
-
-import { ContentTypeHandler } from "../handlers/ContentTypeHandler";
-import { detectContentType } from "../handlers/typeDispatcher";
-
 /**
  * Interface for a minimal LLM provider that takes a prompt and returns the LLM's markdown response.
  */
@@ -40,9 +39,6 @@ export interface LLMProvider {
 /**
  * Interface for a content downloader, responsible for fetching content and metadata for a given URL.
  */
-export interface ContentDownloader {
-  downloadContent(url: string): Promise<{ content: any; metadata: any }>;
-}
 
 /**
  * Interface for note writing.
@@ -60,8 +56,7 @@ export interface INoteWriter {
 }
 
 export interface ImportPipelineDependencies {
-  urlValidator: IUrlValidator;
-  contentDownloader: ContentDownloader;
+  settings: PluginSettings;
   llmProvider: LLMProvider;
   noteWriter: INoteWriter;
   logger?: {
@@ -110,18 +105,6 @@ export class ImportPipelineOrchestrator {
    * to ensure robust error isolation, user-friendly error mapping, and detailed logging.
    * All errors are propagated to the UI via error events/callbacks with actionable messages.
    */
-  // --- Utility functions for filename/frontmatter generation (moved from noteWriter) ---
-  /**
-   * Generates a note filename based on the title, with a date prefix (YYYY-MM-DD) and sanitized title.
-   * @param title The note title
-   * @param date Optional Date object (defaults to today)
-   * @returns The generated filename (e.g., "2025-04-11 My Video Title.md")
-   */
-  private generateNoteFilename(title: string, date: Date = new Date()): string {
-    const datePrefix = date.toISOString().slice(0, 10); // YYYY-MM-DD
-    const sanitizedTitle = (title || "Untitled").replace(/[\\/:*?"<>|]/g, ""); // fallback sanitize
-    return `${datePrefix} ${sanitizedTitle}.md`;
-  }
 
   /**
    * Generates YAML frontmatter for a note, including videoId, url, and importTimestamp.
@@ -196,10 +179,21 @@ export class ImportPipelineOrchestrator {
     let noteContent: string;
     let notePath: string;
 
-    // 1. URL Validation
+    // 1. URL Validation (basic)
     this.emitProgress({ stage: 'validating_url' });
     try {
-      await this.deps.urlValidator.validate(url);
+      // Basic URL format validation
+      let urlObj: URL;
+      try {
+        urlObj = new URL(url);
+      } catch (err) {
+        throw { userMessage: "The provided URL is not valid." };
+      }
+      // Handler existence check
+      handler = detectContentType(urlObj);
+      if (!handler) {
+        throw { userMessage: `Unsupported or unrecognized content type for URL: ${url}` };
+      }
     } catch (err: any) {
       let userMessage = "Invalid or unsupported URL.";
       if (err?.userMessage) userMessage = err.userMessage;
@@ -214,41 +208,15 @@ export class ImportPipelineOrchestrator {
       return;
     }
 
-    // 2. Handler Selection (Content Type Detection)
-    this.emitProgress({ stage: 'detecting_content_type' });
-    try {
-      const urlObj = new URL(url);
-      handler = detectContentType(urlObj);
-      if (!handler) {
-        logger?.warn?.("No handler found for URL:", url);
-        const userMessage = `Unsupported or unrecognized content type for URL: ${url}`;
-        this.emitError({
-          stage: "detecting_content_type",
-          userMessage,
-          error: { userMessage }
-        });
-        return;
-      }
-    } catch (err: any) {
-      let userMessage = "Could not determine the content type for the provided URL.";
-      if (err?.userMessage) userMessage = err.userMessage;
-      else if (err?.name === "NetworkError") userMessage = "Network error during content type detection.";
-      else if (typeof err === "string") userMessage = err;
-      logger?.error?.("[Content Type Detection] Error:", userMessage, err);
-      this.emitError({
-        stage: "detecting_content_type",
-        userMessage,
-        error: err
-      });
-      return;
-    }
+    // 2. Handler Selection (Content Type Detection) - now handled in URL validation above
 
-    // 3. Content Download
+    // 3. Content Download (direct via handler)
     this.emitProgress({ stage: 'downloading_content' });
     try {
-      const result = await this.deps.contentDownloader.downloadContent(url);
+      const result = await handler.download(url);
       content = result.content;
       metadata = result.metadata;
+      logger?.debugLog?.("[Content Download] Content and metadata:", content, metadata);
     } catch (err: any) {
       let userMessage = "Failed to download content. Please check your network connection or the source URL.";
       if (err?.userMessage) userMessage = err.userMessage;
@@ -269,8 +237,10 @@ export class ImportPipelineOrchestrator {
     try {
       llmPrompt = handler.getPrompt(metadata);
       llmRawResponse = await this.deps.llmProvider.callLLM(llmPrompt);
-      llmParsed = handler.parseLLMResponse(llmRawResponse);
-      noteContent = typeof llmParsed === "string" ? llmParsed : JSON.stringify(llmParsed, null, 2);
+      if(!handler.validateLLMOutput(handler.parseLLMResponse(llmRawResponse))){
+        throw new Error("LLM output validation failed.");
+      }
+      noteContent = llmRawResponse;
     } catch (err: any) {
       let userMessage = "AI processing failed. Please try again later.";
       if (err?.userMessage) userMessage = err.userMessage;
@@ -289,29 +259,17 @@ export class ImportPipelineOrchestrator {
     this.emitProgress({ stage: 'writing_note' });
     try {
       // 5.1 Determine folder path from handler (if available)
-      const folderPath = typeof (handler as any).getFolderName === "function"
-        ? (handler as any).getFolderName(metadata)
-        : "Imported Notes";
+      const folderPath = this.deps.settings.defaultFolder + '/' + handler.getFolderName();
 
       // 5.2 Generate filename using note title and date
       const title = metadata?.title || "Imported Note";
-      const date = metadata?.importTimestamp ? new Date(metadata.importTimestamp) : new Date();
-      let filename = this.generateNoteFilename(title, date);
+      let filename = sanitizeFilename(title) + ".md";
 
       // 5.3 TODO: Optionally resolve filename conflicts (requires reading existing files in folder)
       // For now, assume filename is unique
 
-      // 5.4 Generate YAML frontmatter/metadata
-      const videoId = metadata?.videoId || "";
-      const importUrl = url;
-      const importTimestamp = date;
-      const frontmatter = this.generateNoteFrontmatter(videoId, importUrl, importTimestamp);
-
-      // 5.5 Assemble final note content (frontmatter + body)
-      const finalContent = `${frontmatter}\n\n${noteContent}`;
-
       // 5.6 Write note using pure file writer
-      notePath = await this.deps.noteWriter.writeNote(folderPath, filename, finalContent);
+      notePath = await this.deps.noteWriter.writeNote(folderPath, filename, handler.getNoteContent(noteContent, metadata));
     } catch (err: any) {
       let userMessage = "Failed to write the note to your vault. Please check your file system permissions.";
       if (err?.userMessage) userMessage = err.userMessage;

@@ -10,7 +10,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   apiKey: "",
   llmEndpoint: "https://router.requesty.io/v1/chat/completions",
   model: "google/gemini-2.0-flash-exp",
-  defaultFolder: "Sources/YouTube",
+  defaultFolder: "Sources",
   debug: false,
 };
 

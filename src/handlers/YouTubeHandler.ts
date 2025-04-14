@@ -187,7 +187,7 @@ Subtitles: {{transcript}}
   /**
    * Downloads the YouTube transcript and extracts video metadata.
    */
-  async downloadContent(url: string): Promise<{ content: string; metadata: YouTubeVideoData }> {
+  async download(url: string): Promise<{ content: string; metadata: YouTubeVideoData }> {
     const videoId = extractYouTubeVideoId(url);
     if (!videoId) {
       throw new Error("Invalid YouTube URL: cannot extract video ID");
@@ -205,17 +205,18 @@ Subtitles: {{transcript}}
       return nameTag ? nameTag[1] : undefined;
     }
 
+    const AUTHOR_REGEX = /"author":"([^"]+)"/;
+    const CHANNEL_ID_REGEX = /"channelId":"([^"]+)"/;
+
     const title = getMeta("title") || "";
-    const author = getMeta("video:director") || getMeta("site_name") || "";
-    const authorUrl = getMeta("video:director:url") || "";
+    const author = html.match(AUTHOR_REGEX)?.[1] || getMeta("video:director") || getMeta("site_name") || "";
+    const authorUrl = html.match(CHANNEL_ID_REGEX)?.[1] || getMeta("video:director:url") || "";
     const thumbnailUrl = getMeta("image") || "";
     const providerName = getMeta("site_name") || "YouTube";
     const providerUrl = "https://www.youtube.com";
     const htmlEmbed = getMeta("video:url") ? generateYouTubeEmbedHtml(videoId) : "";
-    const width = 560;
-    const height = 315;
-    const version = "1.0";
-    const type = "video";
+    const width = Number.parseInt(getMeta("video:width") || "560");
+    const height = Number.parseInt(getMeta("video:height") || "315");
 
     let thumbnailWidth = 0, thumbnailHeight = 0;
     const thumbDimMatch = html.match(/<meta[^>]+property=[\"']og:image:width[\"'][^>]+content=[\"'](\d+)[\"']/i);
@@ -236,8 +237,6 @@ Subtitles: {{transcript}}
       html: htmlEmbed,
       width,
       height,
-      version,
-      type,
       transcript
     };
 
@@ -247,7 +246,21 @@ Subtitles: {{transcript}}
   /**
    * Returns the folder name for YouTube notes.
    */
-  getFolderName(metadata: any): string {
-    return "Sources/YouTube";
+  getFolderName(): string {
+    return "YouTube";
+  }
+
+  /**
+   * Generates the note content to be written to the file.
+   */
+  getNoteContent(markdown: string, metadata: YouTubeVideoData): string {
+    const noteContent = [
+      `# ${metadata.title}\n`,
+      `![Thumbnail](${metadata.thumbnailUrl})\n`,
+      `Author: [${metadata.author}](${metadata.authorUrl})\n`,
+      `Video: [Watch here](https://www.youtube.com/watch?v=${metadata.videoId})\n`,
+      markdown,
+    ];
+    return noteContent.join("\n");
   }
 }
