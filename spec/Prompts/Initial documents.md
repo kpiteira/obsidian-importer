@@ -10,9 +10,8 @@ I used gpt4o to iterate on the PRD
 
 ### Initial prompt
 
-```text
-I would like to start a new project, which is an Obsidian importer, which allows you to import content into an Obsidian node based on a URL. And depending on the content, it will automatically download it, interpret it through an LLM and then format it correctly. My goal is to develop an Obsidian plugin for that. And I would like to start by writing a product requirement document, then an architecture document, and then a very detailed task list. So my first ask to you, based on the description below, is to help me write a product requirement document. I want this to be a brainstorm. It's a conversation, so please ask me any question. Oh, and all my documents, I want to be in Markdown, please.
-```
+`I would like to start a new project, which is an Obsidian importer, which allows you to import content into an Obsidian node based on a URL. And depending on the content, it will automatically download it, interpret it through an LLM and then format it correctly. My goal is to develop an Obsidian plugin for that. And I would like to start by writing a product requirement document, then an architecture document, and then a very detailed task list. So my first ask to you, based on the description below, is to help me write a product requirement document. I want this to be a brainstorm. It's a conversation, so please ask me any question. Oh, and all my documents, I want to be in Markdown, please.`
+
 then I pasted my idea file content
 
 #### Response
