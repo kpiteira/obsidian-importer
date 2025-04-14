@@ -24,7 +24,7 @@ export default class MyPlugin extends Plugin {
       name: 'Import from URL...',
       callback: () => {
         // Open the modal and delegate import to orchestrator.run()
-        new UrlInputModal(this.app, (url: string) => orchestrator.run(url)).open();
+        new UrlInputModal(this.app, this.settings, logger).open();
       }
     });
     // Optionally, add other commands that delegate to orchestrator as needed.

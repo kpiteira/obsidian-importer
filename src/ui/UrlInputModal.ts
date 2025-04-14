@@ -9,11 +9,18 @@ import { ImportPipelineOrchestrator, ImportPipelineDependencies, ImportPipelineP
  */
 export class UrlInputModal extends Modal {
   private errorEl: HTMLElement | null = null;
-  private onSubmit: (url: string) => void;
+  private ribbonEl: HTMLElement | null = null;
+  private inputEl: HTMLInputElement | null = null;
+  private settings: any;
+  private logger: any;
+  private progressUnsub: (() => void) | null = null;
+  private errorUnsub: (() => void) | null = null;
+  private pipelineActive: boolean = false;
 
-  constructor(app: App, onSubmit: (url: string) => void) {
+  constructor(app: App, settings: any, logger: any) {
     super(app);
-    this.onSubmit = onSubmit;
+    this.settings = settings;
+    this.logger = logger;
   }
 
   onOpen() {
@@ -24,17 +31,19 @@ export class UrlInputModal extends Modal {
     contentEl.empty();
     contentEl.addClass('obsidian-importer-url-input-modal');
     // Create input field for URL entry
-    const inputEl = contentEl.createEl('input', {
+    this.inputEl = contentEl.createEl('input', {
       type: 'text',
       cls: 'obsidian-importer-url-input',
       attr: { placeholder: 'Paste or type a URL...' }
     });
+    const inputEl = this.inputEl;
 
     // Progress ribbon element (hidden by default)
-    const ribbonEl = contentEl.createEl('div', {
+    this.ribbonEl = contentEl.createEl('div', {
       cls: 'obsidian-importer-detection-ribbon',
       text: ''
     });
+    const ribbonEl = this.ribbonEl;
     ribbonEl.style.display = 'none';
 
     // Error message element (hidden by default)
@@ -70,11 +79,73 @@ export class UrlInputModal extends Modal {
           return;
         }
 
-        // Delegate import to the provided callback
-        this.onSubmit(urlStr);
-        this.close();
+        // Disable input and show progress
+        inputEl.disabled = true;
+        ribbonEl.style.display = '';
+        ribbonEl.textContent = 'Starting import...';
+        ribbonEl.classList.remove('obsidian-importer-detection-ribbon-success', 'obsidian-importer-detection-ribbon-error');
+
+        // Start the async pipeline, wiring up orchestrator events for UI updates and modal closing
+        (async () => {
+          try {
+            const { createImportPipelineOrchestrator } = await import('../orchestrator/orchestratorFactory');
+            const orchestrator = await createImportPipelineOrchestrator(this.app, this.settings, this.logger);
+
+            orchestrator.onProgress((progress) => {
+              ribbonEl.style.display = '';
+              switch (progress.stage) {
+                case 'validating_url':
+                  ribbonEl.textContent = 'Validating URL...';
+                  break;
+                case 'detecting_content_type':
+                  ribbonEl.textContent = 'Detecting content type...';
+                  break;
+                case 'downloading_content':
+                  ribbonEl.textContent = 'Downloading content...';
+                  break;
+                case 'processing_with_llm':
+                  ribbonEl.textContent = 'Processing with LLM...';
+                  break;
+                case 'writing_note':
+                  ribbonEl.textContent = 'Writing note...';
+                  break;
+                case 'completed':
+                  ribbonEl.textContent = 'Import complete!';
+                  ribbonEl.classList.add('obsidian-importer-detection-ribbon-success');
+                  inputEl.disabled = false;
+                  (this as any).closeOnPipelineComplete();
+                  break;
+                default:
+                  ribbonEl.textContent = '';
+              }
+            });
+
+            orchestrator.onError((err) => {
+              const msg = err?.userMessage || String(err);
+              ribbonEl.style.display = '';
+              ribbonEl.textContent = 'Error: ' + msg;
+              ribbonEl.classList.add('obsidian-importer-detection-ribbon-error');
+              this.showError(msg);
+              inputEl.disabled = false;
+            });
+
+            await orchestrator.run(urlStr);
+          } catch (err: any) {
+            const msg = err?.userMessage || err?.message || String(err);
+            ribbonEl.style.display = '';
+            ribbonEl.textContent = 'Error: ' + msg;
+            ribbonEl.classList.add('obsidian-importer-detection-ribbon-error');
+            this.showError(msg);
+            inputEl.disabled = false;
+          }
+        })();
       }
     });
+
+    // Allow orchestrator/caller to close the modal when pipeline completes
+    (this as any).closeOnPipelineComplete = () => {
+      this.close();
+    };
   }
 
   private showError(message: string) {
@@ -96,6 +167,8 @@ export class UrlInputModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
     this.errorEl = null;
+    this.ribbonEl = null;
+    this.inputEl = null;
     // Defensive: ensure no progress ribbon or error is left visible
     // (in case modal is closed before pipeline completes)
     // This is safe because contentEl is emptied above.

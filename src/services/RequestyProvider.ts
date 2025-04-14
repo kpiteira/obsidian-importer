@@ -1,10 +1,7 @@
 import { LLMProvider } from "./LLMProvider";
-import { retryWithExponentialBackoff, isTransientError } from "./retryWithExponentialBackoff";
+import { retryWithExponentialBackoff, isTransientError } from "../utils/retryWithExponentialBackoff";
 import { redactApiKey } from "../utils/redact";
 import { requestUrl, RequestUrlResponse } from "obsidian";
-import { getLogger } from "../utils/importerLogger";
-import { get } from "http";
-
 
 /**
  * RequestyProvider implements the LLMProvider interface for the Requesty API.

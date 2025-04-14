@@ -1,11 +1,9 @@
 import { extractYouTubeVideoId, generateYouTubeEmbedHtml } from "../utils/youtube";
 import { ContentTypeHandler } from "./ContentTypeHandler";
-import { fetchYouTubeTranscript } from "../services/YouTubeTranscriptService";
-import { YouTubeVideoData } from "../models/YouTubeVideoData";
 import { requestUrl, RequestUrlResponse } from "obsidian";
 import { extractTranscriptFromHtml } from "../services/YouTubeTranscriptService";
-import { getLogger } from "../utils/importerLogger";
 import { LLMOutput } from "../services/LLMProvider";
+import { ContentMetadata } from '../handlers/ContentTypeHandler';
 
 /**
  * Structured output for YouTube LLM responses, extending the base LLMOutput.
@@ -14,6 +12,25 @@ export interface YouTubeLLMOutput extends LLMOutput {
   summary: string;
   keyPoints: string[];
   keyConcepts: string[];
+}
+
+/**
+ * Interface representing YouTube video metadata as returned by the oEmbed API,
+ * with additional videoId field.
+ */
+export interface YouTubeVideoData extends ContentMetadata {
+  videoId: string;
+  author: string;
+  authorUrl: string;
+  thumbnailUrl: string;
+  thumbnailWidth: number;
+  thumbnailHeight: number;
+  providerName: string;
+  providerUrl: string;
+  html: string;
+  width: number;
+  height: number;
+  transcript?: string; // Optional transcript field for pipeline compatibility
 }
 
 /**
@@ -255,7 +272,6 @@ Subtitles: {{transcript}}
    */
   getNoteContent(markdown: string, metadata: YouTubeVideoData): string {
     const noteContent = [
-      `# ${metadata.title}\n`,
       `![Thumbnail](${metadata.thumbnailUrl})\n`,
       `Author: [${metadata.author}](${metadata.authorUrl})\n`,
       `Video: [Watch here](https://www.youtube.com/watch?v=${metadata.videoId})\n`,

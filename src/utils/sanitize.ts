@@ -11,7 +11,7 @@
  * @param maxLength Maximum length of the sanitized filename (default: 50)
  * @returns Sanitized filename string
  */
-export function sanitizeFilename(input: string, maxLength = 50): string {
+export function sanitizeFilename(input: string, maxLength = 255): string {
   // Remove invalid characters
   let sanitized = input.replace(/[\/\\:*?"<>|]/g, "");
 
