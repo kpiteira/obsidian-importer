@@ -1,7 +1,3 @@
-Based on your requirements, I'll create a comprehensive implementation prompt for Slice 1.1. Let me extract the most relevant information from the architecture document and structure it appropriately.
-
----
-
 # Implementation Prompt for Slice 1.1: Base Provider Interface and Registry
 
 ```
