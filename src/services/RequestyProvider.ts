@@ -1,105 +1,95 @@
-import { LLMProvider } from "./LLMProvider";
-import { retryWithExponentialBackoff, isTransientError } from "../utils/retryWithExponentialBackoff";
-import { redactApiKey } from "../utils/redact";
-import { requestUrl, RequestUrlResponse } from "obsidian";
+import { BaseOpenAIProvider } from "./BaseOpenAIProvider";
+import { ModelInfo } from "./LLMProvider";
+import { SecureApiKey } from "../utils/apiKeyUtils";
+import { getLogger } from "../utils/importerLogger";
 
 /**
  * RequestyProvider implements the LLMProvider interface for the Requesty API.
- * Handles API call logic, error handling, and timeout management.
+ * Extends BaseOpenAIProvider for OpenAI-compatible API handling.
  */
-export class RequestyProvider implements LLMProvider {
-  private getSettings: () => { endpoint: string; model: string; timeoutMs: number };
-  private apiKey: string;
+export class RequestyProvider extends BaseOpenAIProvider {
+  // Update the default endpoint to match what's in the settings
+  private static readonly DEFAULT_ENDPOINT = "https://router.requesty.ai/v1/chat/completions";
+  private static readonly DEFAULT_MODEL = "google/gemini-2.0-flash-exp";
+  // Make logger protected to match the parent class
+  protected override logger = getLogger();
 
   /**
-   * @param getSettings Function that returns the latest { endpoint, model, timeoutMs }
+   * Available models for Requesty
+   */
+  private static readonly AVAILABLE_MODELS: ModelInfo[] = [
+    { id: "google/gemini-2.0-flash-exp", name: "Gemini 2.0 Flash Exp" },
+    { id: "gpt-4-turbo", name: "GPT-4 Turbo" },
+    { id: "gpt-4", name: "GPT-4" },
+    { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo" }
+  ];
+
+  /**
    * @param apiKey API key for Requesty
+   * @param options Additional options (endpoint, model, etc.)
    */
   constructor(
-    getSettings: () => { endpoint: string; model: string; timeoutMs: number },
-    apiKey: string
+    apiKey: string,
+    options?: {
+      endpoint?: string;
+      modelId?: string;
+      timeoutMs?: number;
+      temperature?: number;
+      systemPrompt?: string;
+    }
   ) {
-    this.getSettings = getSettings;
-    this.apiKey = apiKey;
+    // Create a secure API key for the parent class
+    const secureKey = new SecureApiKey(apiKey);
+    
+    const endpoint = options?.endpoint ?? RequestyProvider.DEFAULT_ENDPOINT;
+    const modelId = options?.modelId ?? RequestyProvider.DEFAULT_MODEL;
+    
+    // Log provider creation with debug level
+    getLogger().debugLog(
+      `Creating RequestyProvider with endpoint=${endpoint}, model=${modelId}`
+    );
+    
+    super(
+      secureKey.getValue(), // Extract the actual API key for authentication
+      endpoint,
+      modelId,
+      {
+        timeoutMs: options?.timeoutMs,
+        temperature: options?.temperature,
+        systemPrompt: options?.systemPrompt
+      }
+    );
   }
 
+  /**
+   * Get the provider name
+   */
+  getName(): string {
+    return "Requesty";
+  }
 
   /**
-   * Calls the Requesty LLM API.
-   * @param input Structured input for the LLM.
-   * @param apiKey API key for Requesty.
-   * @returns Promise resolving to the raw LLM response (Markdown).
+   * Get the default endpoint URL
    */
-  async callLLM(
-    prompt: string
-  ): Promise<string> {
-    // Fetch latest settings dynamically
-    const { endpoint, model, timeoutMs } = this.getSettings();
+  getDefaultEndpoint(): string {
+    return RequestyProvider.DEFAULT_ENDPOINT;
+  }
 
-    const body = {
-      model,
-      messages: [
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-    };
-
-    const doApiCall = async (): Promise<string> => {
-      try {
-        const responsePromise = requestUrl({
-          url: endpoint,
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${this.apiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(body),
-          contentType: "application/json",
-        });
-        const timeoutPromise = new Promise<RequestUrlResponse>((_, reject) =>
-          setTimeout(() => reject(new Error(`Requesty API request timed out after ${timeoutMs / 1000} seconds.`)), timeoutMs)
-        );
-        const response = await Promise.race([responsePromise, timeoutPromise]) as RequestUrlResponse;
-        if (response.status < 200 || response.status >= 300) {
-          let errorMsg = `Requesty API error: ${response.status}`;
-          try {
-            const errorData = response.json ? await response.json : JSON.parse(response.text);
-            if (errorData && errorData.error && errorData.error.message) {
-              errorMsg += ` - ${errorData.error.message}`;
-            }
-          } catch {
-            // Ignore JSON parse errors
-          }
-          throw new Error(redactApiKey(errorMsg, this.apiKey));
-        }
-
-        const data = response.json ? await response.json : JSON.parse(response.text);
-        if (
-          !data ||
-          !data.choices ||
-          !Array.isArray(data.choices) ||
-          !data.choices[0] ||
-          !data.choices[0].message ||
-          typeof data.choices[0].message.content !== "string"
-        ) {
-          throw new Error(redactApiKey("Invalid response format from Requesty API.", this.apiKey));
-        }
-        return data.choices[0].message.content;
-      } catch (err: any) {
-        if (err.message && err.message.includes("timed out")) {
-          throw new Error(redactApiKey(err.message, this.apiKey));
-        }
-        throw new Error(
-          redactApiKey(
-            `Failed to call Requesty API: ${err && err.message ? err.message : String(err)}`,
-            this.apiKey
-          )
-        );
-      }
-    };
-
-    return retryWithExponentialBackoff(doApiCall, isTransientError, 3, [500, 1000, 2000]);
+  /**
+   * Get available models for this provider
+   */
+  async getAvailableModels(): Promise<ModelInfo[]> {
+    // Requesty doesn't have an API to list models, so we return a predefined list
+    return RequestyProvider.AVAILABLE_MODELS;
+  }
+  
+  /**
+   * Override callLLM to add provider-specific handling if needed
+   */
+  async callLLM(prompt: string, options?: any): Promise<string> {
+    this.logger.debugLog(
+      `RequestyProvider.callLLM called with model=${this.modelId}`
+    );
+    return super.callLLM(prompt, options);
   }
 }

@@ -3,24 +3,84 @@
  */
 export interface LLMOutput {}
 
+/**
+ * Model information interface for available LLM models
+ */
+export interface ModelInfo {
+  id: string;
+  name: string;
+  contextLength?: number;
+  supportsStreaming?: boolean;
+}
+
+/**
+ * Options for LLM API calls
+ */
+export interface LLMOptions {
+  model?: string;
+  endpoint?: string;
+  systemPrompt?: string;
+  temperature?: number;
+  maxTokens?: number;
+  timeoutMs?: number;
+}
 
 /**
  * LLMProvider abstracts interaction with different LLM APIs.
- * Implementations should handle provider-specific request/response logic.
- * 
- * - callLLM: Accepts structured input, API key, and prompt template.
- *   Returns a Promise resolving to the raw LLM response (Markdown).
- * - Extensible: API endpoint, model, and prompt template are configurable.
  */
 export interface LLMProvider {
   /**
-   * Calls the LLM with the given input and API key.
-   * @param input Structured input for the LLM (e.g., transcript, metadata).
-   * @param apiKey API key for authenticating with the LLM provider.
-   * @returns Promise resolving to the raw LLM response (Markdown).
+   * Get the provider name
    */
-  callLLM(
-    prompt: string,
-    apiKey: string
-  ): Promise<string>;
+  getName(): string;
+  
+  /**
+   * Get the default endpoint URL for this provider
+   */
+  getDefaultEndpoint(): string;
+  
+  /**
+   * Get available models for this provider
+   */
+  getAvailableModels(): Promise<ModelInfo[]>;
+  
+  /**
+   * Calls the LLM with the given prompt and optional parameters
+   * @param prompt The prompt to send to the LLM
+   * @param options Optional parameters for the LLM call
+   * @returns Promise resolving to the LLM response text
+   */
+  callLLM(prompt: string, options?: LLMOptions): Promise<string>;
+  
+  /**
+   * Validate the connection to the LLM provider
+   */
+  validateConnection(): Promise<boolean>;
+  
+  /**
+   * Whether this provider requires an API key
+   */
+  requiresApiKey(): boolean;
+  
+  /**
+   * Whether this provider allows specifying a custom endpoint
+   */
+  requiresEndpoint(): boolean;
 }
+
+/**
+ * Provider types supported by the plugin
+ */
+export enum ProviderType {
+  REQUESTY = 'requesty',
+  OPENROUTER = 'openrouter',
+  OPENAI = 'openai',
+  LOCAL = 'local'
+}
+
+/**
+ * Default configuration for providers
+ */
+export const DEFAULT_TIMEOUT_MS = 60000;
+export const DEFAULT_TEMPERATURE = 0.3;
+export const DEFAULT_SYSTEM_PROMPT = "You are a helpful assistant that analyzes content.";

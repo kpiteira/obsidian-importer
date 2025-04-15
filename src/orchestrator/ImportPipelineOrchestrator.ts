@@ -3,7 +3,7 @@ import { ContentTypeHandler } from "../handlers/ContentTypeHandler";
 import { detectContentType } from "../handlers/typeDispatcher";
 import { PluginSettings } from "../utils/settings";
 import { sanitizeFilename } from "../utils/sanitize";
-
+import { LLMProvider as ServiceLLMProvider, LLMOptions } from "../services/LLMProvider";
 
 /**
  * ImportPipelineOrchestrator
@@ -33,7 +33,7 @@ export type ErrorCallback = (error: ImportPipelineError) => void;
  * Interface for a minimal LLM provider that takes a prompt and returns the LLM's markdown response.
  */
 export interface LLMProvider {
-  callLLM(prompt: string): Promise<string>;
+  callLLM(prompt: string, options?: LLMOptions): Promise<string>;
 }
 
 /**
@@ -57,7 +57,7 @@ export interface INoteWriter {
 
 export interface ImportPipelineDependencies {
   settings: PluginSettings;
-  llmProvider: LLMProvider;
+  llmProvider: ServiceLLMProvider; // Use the imported LLMProvider interface
   noteWriter: INoteWriter;
   logger?: {
     info: (...args: unknown[]) => void;
@@ -238,7 +238,14 @@ export class ImportPipelineOrchestrator {
     this.emitProgress({ stage: 'processing_with_llm' });
     try {
       llmPrompt = handler.getPrompt(metadata);
-      llmRawResponse = await this.deps.llmProvider.callLLM(llmPrompt);
+      
+      // Use the new LLMProvider interface
+      const llmOptions: LLMOptions = {
+        systemPrompt: "You are a helpful assistant that analyzes content."
+      };
+      
+      llmRawResponse = await this.deps.llmProvider.callLLM(llmPrompt, llmOptions);
+      
       if(!handler.validateLLMOutput(handler.parseLLMResponse(llmRawResponse))){
         throw new Error("LLM output validation failed. The AI response doesn't match the expected format.");
       }
