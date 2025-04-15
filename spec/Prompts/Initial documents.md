@@ -121,6 +121,252 @@ My plan is probably to feed it alongside with the PRD and architecture, and ask 
 
 Before starting v2, I want to revise my MVP architecture document to make sure we start on solid basis. For that, I am going to ask Copilot to understand the deviation between MVP architecture document and the actual implementation: 
 
+### Prompt
+
 ```text
 I succesfully implemented my MVP which architecture was based on the document obsidian_importer_architecture. I would like to understand the deviation between my codebase and the architecture document, and to generate a new architecture document based on the actual implementation so that I can use it for a v2.
 ```
+
+### Response
+
+Copilot did an amazing job at understanding my codebase and write an updated document 
+
+## V2 PRD
+
+### Prompt
+
+```text
+I completed the implementation of my plugin MVP. I would like now to start my v2. My PRD for the MVP (provided here) had some ideas for the V2. I would like to write a detailed PRD for V2 based on these ideas. Can you please help me? Please note that this is a brainstorming together, and I would appreciate if you asked me questions so that we can refine the content of the PRD together, instead of just 1-shot producing the v2 prd on your own. Once we're done, we will write the output of the PRD in a new markdown file to preserve the existing one.
+```
+
+### Response
+
+Again great job from Copilot
+
+```markdown
+I'd be happy to help you brainstorm and create a detailed PRD for version 2 of your Obsidian Importer plugin. This collaborative approach will help us refine the requirements effectively.
+
+Looking at your current PRD, I can see you have some initial ideas for V2:
+- Supporting additional content types beyond YouTube
+- More flexibility in LLM model selection
+- UI improvements
+
+Let's start by exploring these areas with some questions:
+
+### Content Types
+1. Which specific content types from your "Eventually" list would you like to prioritize for V2? 
+2. Are there any challenges or unique considerations for each content type you're concerned about?
+3. What's your strategy for content extraction for different sources (e.g., APIs, web scraping)?
+
+### LLM Model Selection
+1. Do you have specific providers in mind beyond the ones mentioned (Requesty, OpenRouter, OpenAI, Ollama)?
+2. What criteria would users use to select models (cost, speed, quality, token limits)?
+3. How would you like to handle API keys for different providers?
+
+### UI Improvements
+1. What specific UI pain points have you identified in V1?
+2. Would you like to add any visualization features for the import process?
+3. Are there any settings or configuration UI improvements you'd like to make?
+
+Additionally:
+- Have you received any user feedback from V1 that would influence V2 priorities?
+- Are there any technical limitations you encountered in V1 that need addressing?
+- Do you have any performance concerns as you add more content types?
+
+Let's start with these questions and build our V2 PRD from there.
+```
+
+I love the questions about user feedback, limitations and performance concerns!
+
+After multiple questions/answers, we landed on the final PRD. I then proceeded to working on the architecture document
+
+## V2 Architecture Document
+
+### Prompt
+
+```text
+This is great, thank you! I saved it in prd_v2.
+I would like now to generate our detailed architecture document, using as a basis the one from the mvp (attached). Like in the previous step, please see this as a brainstorm, and do ask me questions so that we reach an optimal and detailed architecture document!
+```
+
+### Response
+
+```markdown
+I'd be happy to help you brainstorm a detailed architecture document for V2, using the MVP architecture document as a basis. This collaborative approach will help us refine the architecture effectively.
+
+Looking at your MVP architecture document and the V2 PRD we just created, I can see we need to expand the architecture to support multiple content types and LLM providers, while maintaining the solid foundation you've already built.
+
+Let's start with some key questions to guide our discussion:
+
+### Content Type Architecture
+1. How do you envision the content type registry working? Should it be a central registry that all handlers register with, or would you prefer lazy-loading handlers?
+2. For the generic content handlers (recipes, restaurants, movies), do you want a single generic handler with specialized logic or completely separate handlers?
+
+### LLM Provider Architecture
+1. How should we handle the provider factory pattern? Should we extend your current factory approach or create a new provider registry?
+2. For storing multiple API keys (one per provider), do you have a preference for the storage approach?
+
+### Error Handling and Recovery
+1. Would you like to implement specific retry strategies for different types of operations (network, LLM calls, etc.)?
+2. How granular should error reporting be to users vs. logging for developers?
+
+### State Management
+1. The MVP architecture document mentions "more formal state management" - do you have specific ideas or would you like suggestions?
+2. How would you like to handle the history of recent imports? As in-memory state, persistent storage, or both?
+
+### UI Architecture
+1. For the settings UI with dynamic fields based on provider selection, do you have a preference for how this should be implemented?
+2. For the progress indication improvements, should we extend the current progress callback system or take a different approach?
+
+Let's start with these questions and then we can dive deeper into specific areas.
+```
+
+## Detailed Task List
+
+### Prompt
+
+```text
+Great. When implementing the MVP, I used a detailed task list as attached which purpose was to be implemented by an AI. However it gave me a lot of trouble as the implementation constantely focused on the local parts, with no stitching together along the way, and I had a lot of work to do afterward to untangle a lot of local choices that were ok for the given task but weren't very good in the overall architecture.
+I'd like your help to generate a very detailed task list, but taking into account this feedback. Feel free to recommend a different format, and please, let's make sure that we can test the functionnality along the way, with a project that evolves as we implement the various tasks and is testable in the plugin at least at the major task level.
+```
+
+### Response
+
+The detailed task list v2
+
+### Asking how to prompt for optimal result
+
+```text
+Perfect, thank you! Do you have a suggestion about how I should prompt the AI to implement a given slice? Should I provide it the architecture document, or the prd too? the entire task list or just the slice?
+```
+
+### Response
+
+For the most effective implementation, I recommend a structured approach when prompting the AI to implement a specific slice. Here's how I would suggest doing it:
+
+#### Optimal Prompting Strategy for Slice Implementation
+
+1. **Start with the specific slice context**:
+   - Provide the specific slice details from the task list
+   - Include the goal statement so the AI understands the purpose
+
+2. **Add relevant architectural context**:
+   - Include only the sections from the architecture document that are directly relevant to the slice
+   - For example, for a provider implementation, include the LLM Provider interface and base classes
+
+3. **Include minimal PRD context**:
+   - Provide only the PRD sections that define requirements for the specific functionality
+
+4. **Show existing related code**:
+   - Share relevant existing code that the new implementation needs to integrate with
+   - For early slices, include core orchestrator code to show how components connect
+
+5. **Request specific deliverables**:
+   - Ask for all files that need to be created or modified
+   - Request tests that demonstrate the functionality works
+
+#### Example Prompt Template
+
+```
+I'm implementing Slice X.Y: [Slice Title] from my Obsidian Importer V2 plan.
+
+Goal: [Insert goal from task list]
+
+The implementation tasks are:
+[List specific implementation points from the slice]
+
+Here are the relevant sections from my architecture document:
+[Paste only relevant architecture sections]
+
+The relevant requirements from the PRD are:
+[Paste only relevant PRD sections]
+
+Here's the existing related code that this needs to integrate with:
+[Paste relevant existing code]
+
+Please provide:
+1. All files that need to be created or modified with complete implementations
+2. Unit tests that verify the core functionality
+3. Any integration code needed to connect this with existing components
+4. Instructions for manually testing this slice in Obsidian
+
+When complete, I should be able to [describe expected testable outcome].
+```
+
+This approach gives the AI enough context to understand what needs to be built and how it fits into the larger system, while avoiding overwhelming it with irrelevant information. It also explicitly requests complete deliverables that you can directly implement and test.
+
+As you progress through the slices, you can reference previously implemented slices when they're relevant to the current work, which provides continuity while maintaining focus on the current task.
+
+
+### Asking for a meta-prompt
+
+```text
+Do you think you could go meta and design a prompt to ask the AI to generate the prompt following the template you provided above, with all the relevant information to describe a given slice, based on the prd and architecture doc and codebase? I want to use the fullest of AI's power :)
+```
+
+### Response
+
+I'd be happy to design a meta-prompt that helps you generate slice-specific implementation prompts. This approach will leverage AI to prepare the optimal context for each implementation task:
+
+#### Meta-Prompt for Generating Slice Implementation Prompts
+
+```
+I'm preparing to implement Slice [X.Y: Slice Title] from my Obsidian Importer V2 plan. Before I start coding, I'd like you to help me create a comprehensive implementation prompt that I can use with an AI coding assistant.
+
+Here's the slice I want to implement:
+
+[Paste the complete slice section from the task list]
+
+I have these documents available:
+1. A V2 PRD document
+2. A V2 Architecture document
+3. My existing codebase
+
+Please generate a well-structured implementation prompt following this template:
+
+---
+I'm implementing Slice [X.Y: Slice Title] from my Obsidian Importer V2 plan.
+
+Goal: [Extract the goal from the slice]
+
+The implementation tasks are:
+[Format the implementation points from the slice as a clear list]
+
+Here are the relevant sections from my architecture document:
+[Please identify and extract ONLY the most relevant sections from this architecture document that directly relate to this slice]
+
+The relevant requirements from the PRD are:
+[Please identify and extract ONLY the most relevant requirements from this PRD document that directly relate to this slice]
+
+Here's the existing related code that this needs to integrate with:
+[Please identify key files/components from the current structure that will need to interact with this implementation]
+
+Please provide:
+1. All files that need to be created or modified with complete implementations
+2. Unit tests that verify the core functionality
+3. Any integration code needed to connect this with existing components
+4. Instructions for manually testing this slice in Obsidian
+
+When complete, I should be able to [describe the expected testable outcome based on the slice goal].
+---
+
+For you to generate this prompt properly, I'll now provide:
+1. The relevant section from my V2 Architecture document
+2. The relevant section from my V2 PRD
+3. Key information about my existing codebase structure and relevant files
+
+[Paste architecture document or sections]
+
+[Paste PRD document or sections]
+
+[Describe/paste key information about your codebase structure]
+```
+
+This meta-prompt:
+
+1. Asks the AI to extract only the most relevant information from your documentation
+2. Formats the implementation tasks clearly
+3. Identifies the existing code components that will interact with the new implementation
+4. Creates a focused, actionable implementation prompt
+
+When you receive the generated implementation prompt, you can review it to ensure it contains all necessary context before using it with your coding assistant. This approach helps streamline your workflow by delegating the context-gathering to the AI while maintaining control over the final implementation prompt.

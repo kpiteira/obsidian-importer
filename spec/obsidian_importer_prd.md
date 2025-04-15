@@ -26,11 +26,16 @@ The **Obsidian Importer** plugin enables users to import content from a URL into
 
 ## 4. Future Versions
 ### V2 Ideas:
-- Add more content types (Medium articles, recipes, books, movies, etc.).
-- Vault integration with fuzzy matching for backlinks to existing notes.
-- Enhanced error handling, configurable LLM prompts, local model support.
+- Support all content types in (5. Supported Content Types (Eventually))
+- More flexibility on model selection (only OpenAI compatible):
+    - Drop down with provider list (Requesty, OpenRouter, OpenAI, local (e.g ollama))
+    - No need to provide the endpoint in the settings, selecting the provider the list does that automatically, except for local which requires the local endpoint
+- Upon choosing the provider, load their list of model
+    - some research might be needed to find an API to download a list of models, ideally with their cost
+- UI improvements.
 
 ### V3+ Ideas:
+- Vault integration with fuzzy matching for backlinks to existing notes.
 - Clipboard monitoring or browser extension support.
 - Offline/local content import (e.g., PDFs or images).
 - Custom logic scripting for advanced template behavior.
