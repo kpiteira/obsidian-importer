@@ -2,18 +2,27 @@ import { ProviderType } from "../services/LLMProvider";
 
 export interface ProviderSettings {
   apiKey: string;
-  endpoint?: string;
+  endpoint: string;
   model: string;
+  timeoutMs?: number;
+}
+
+// Helper for our internal handling
+export type PartialProviderSettings = {
+  apiKey?: string;
+  endpoint?: string;
+  model?: string;
+  timeoutMs?: number;
 }
 
 export interface PluginSettings {
-  // LLM Provider settings (for future slices)
+  // LLM Provider settings
   selectedProvider: ProviderType;
   providerSettings: {
     [key in ProviderType]?: ProviderSettings;
   };
   
-  // Primary settings used for Slice 1.1
+  // Legacy settings (kept for backward compatibility)
   apiKey: string;  
   llmEndpoint: string;
   model: string;
@@ -31,10 +40,29 @@ export const DEFAULT_SETTINGS: PluginSettings = {
       apiKey: "",
       endpoint: "https://router.requesty.ai/v1/chat/completions",
       model: "google/gemini-2.0-flash-exp",
-    }
+      timeoutMs: 60000,
+    },
+    [ProviderType.OPENROUTER]: {
+      apiKey: "",
+      endpoint: "https://openrouter.ai/api/v1/chat/completions",
+      model: "anthropic/claude-3-opus",
+      timeoutMs: 60000,
+    },
+    [ProviderType.OPENAI]: {
+      apiKey: "",
+      endpoint: "https://api.openai.com/v1/chat/completions",
+      model: "gpt-4o",
+      timeoutMs: 60000,
+    },
+    [ProviderType.LOCAL]: {
+      apiKey: "",
+      endpoint: "http://localhost:11434/v1/chat/completions",
+      model: "llama3",
+      timeoutMs: 60000,
+    },
   },
   
-  // Primary settings for Slice 1.1
+  // Legacy settings (kept for backward compatibility)
   apiKey: "",
   llmEndpoint: "https://router.requesty.ai/v1/chat/completions",
   model: "google/gemini-2.0-flash-exp",
@@ -50,9 +78,71 @@ export const DEFAULT_SETTINGS: PluginSettings = {
  */
 export async function loadSettings(plugin: { loadData: () => Promise<Partial<PluginSettings> | null> }): Promise<PluginSettings> {
   const loaded = (await plugin.loadData()) || {};
+  const mergedSettings = { ...DEFAULT_SETTINGS, ...loaded };
   
-  // For Slice 1.1, simply merge with defaults
-  return { ...DEFAULT_SETTINGS, ...loaded };
+  // Ensure provider settings exists
+  if (!mergedSettings.providerSettings) {
+    mergedSettings.providerSettings = { ...DEFAULT_SETTINGS.providerSettings };
+  }
+  
+  // For each provider, ensure defaults are set
+  Object.values(ProviderType).forEach(providerType => {
+    if (!mergedSettings.providerSettings[providerType]) {
+      // Create a complete provider settings object from defaults
+      mergedSettings.providerSettings[providerType] = { 
+        ...DEFAULT_SETTINGS.providerSettings[providerType] as ProviderSettings
+      };
+    } else {
+      // Merge with defaults for this provider to ensure all required fields exist
+      const defaultSettings = DEFAULT_SETTINGS.providerSettings[providerType] as ProviderSettings;
+      const currentSettings = mergedSettings.providerSettings[providerType] as PartialProviderSettings;
+      
+      mergedSettings.providerSettings[providerType] = {
+        apiKey: currentSettings.apiKey ?? defaultSettings.apiKey,
+        endpoint: currentSettings.endpoint ?? defaultSettings.endpoint,
+        model: currentSettings.model ?? defaultSettings.model,
+        timeoutMs: currentSettings.timeoutMs ?? defaultSettings.timeoutMs
+      };
+    }
+  });
+  
+  // Backward compatibility: Copy top-level settings to selected provider if not set
+  const selectedProvider = mergedSettings.selectedProvider;
+  const providerSettings = mergedSettings.providerSettings[selectedProvider] as ProviderSettings | undefined;
+  
+  if (providerSettings) {
+    // Only update if the provider settings exist
+    if (mergedSettings.apiKey && !providerSettings.apiKey) {
+      mergedSettings.providerSettings[selectedProvider] = {
+        ...providerSettings,
+        apiKey: mergedSettings.apiKey
+      };
+    }
+    
+    if (mergedSettings.llmEndpoint && !providerSettings.endpoint) {
+      mergedSettings.providerSettings[selectedProvider] = {
+        ...providerSettings,
+        endpoint: mergedSettings.llmEndpoint
+      };
+    }
+    
+    if (mergedSettings.model && !providerSettings.model) {
+      mergedSettings.providerSettings[selectedProvider] = {
+        ...providerSettings,
+        model: mergedSettings.model
+      };
+    }
+  } else {
+    // Create provider settings if they don't exist
+    mergedSettings.providerSettings[selectedProvider] = {
+      apiKey: mergedSettings.apiKey,
+      endpoint: mergedSettings.llmEndpoint,
+      model: mergedSettings.model,
+      timeoutMs: 60000
+    };
+  }
+  
+  return mergedSettings;
 }
 
 /**

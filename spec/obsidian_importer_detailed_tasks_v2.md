@@ -31,14 +31,14 @@ Instead of breaking down tasks by component, we'll organize work into **incremen
   - Verify provider registration/retrieval works as expected
 
 ### Slice 1.2: Add Provider-specific Settings
-- [ ] **Implementation**:
+- [x] **Implementation**:
   - Enhance `PluginSettings` to support multiple providers and their settings
   - Update settings storage to handle provider-specific configurations
   - Create UI components for provider selection dropdown
-- [ ] **Integration**:
+- [x] **Integration**:
   - Connect settings UI to provider registry
   - Update orchestrator to use selected provider from settings
-- [ ] **Testing**:
+- [x] **Testing**:
   - Verify settings are stored and retrieved correctly
   - Test that provider selection persists across plugin reloads
 

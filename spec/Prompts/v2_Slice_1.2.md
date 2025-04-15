@@ -1,5 +1,6 @@
 # Implementation Prompt for Slice 1.2: Add Provider-specific Settings
 
+We are continuing the implementation of my Obsidian Importer with the v2. Here is the next task on the list:
 ---
 I'm implementing Slice 1.2: Add Provider-specific Settings from my Obsidian Importer V2 plan.
 

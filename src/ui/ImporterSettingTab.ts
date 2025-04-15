@@ -1,12 +1,26 @@
 import { App, Plugin, PluginSettingTab, Setting } from 'obsidian';
-import { PluginSettings, saveSettings } from '../utils/settings';
+import { PluginSettings, PartialProviderSettings } from '../utils/settings';
 import { isValidUrl } from '../utils/url';
 import { getLogger } from '../utils/importerLogger';
+import { LLMProvider, ProviderType } from '../services/LLMProvider';
+import { LLMProviderRegistry } from '../services/LLMProviderRegistry';
 
 export class ImporterSettingTab extends PluginSettingTab {
-  plugin: Plugin & { settings: PluginSettings; saveSettings: () => Promise<void> };
+  plugin: Plugin & { 
+    settings: PluginSettings; 
+    saveSettings: () => Promise<void>;
+    providerRegistry: LLMProviderRegistry; 
+  };
+  private providerSettingsContainer!: HTMLElement; // Using definite assignment assertion
 
-  constructor(app: App, plugin: Plugin & { settings: PluginSettings; saveSettings: () => Promise<void> }) {
+  constructor(
+    app: App, 
+    plugin: Plugin & { 
+      settings: PluginSettings; 
+      saveSettings: () => Promise<void>;
+      providerRegistry: LLMProviderRegistry;
+    }
+  ) {
     super(app, plugin);
     this.plugin = plugin;
   }
@@ -15,116 +29,52 @@ export class ImporterSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    // --- Validation state ---
-    let apiKeyError = '';
-    let endpointError = '';
-
-    // LLM API Key
-    const apiKeySetting = new Setting(containerEl)
-      .setName('LLM API Key')
-      .setDesc('Your API key for the LLM service.')
-      .addText(text => {
-        text
-          .setPlaceholder('Enter API key')
-          .setValue(this.plugin.settings.apiKey)
-          .inputEl.setAttribute('type', 'password');
-        text.onChange(async (value) => {
-          if (!value.trim()) {
-            apiKeyError = 'API key cannot be empty.';
-            text.inputEl.classList.add('importer-error');
-          } else {
-            apiKeyError = '';
-            text.inputEl.classList.remove('importer-error');
-            this.plugin.settings.apiKey = value;
-            await this.plugin.saveSettings();
+    // Provider Selection Dropdown
+    new Setting(containerEl)
+      .setName('LLM Provider')
+      .setDesc('Select which provider to use for LLM processing')
+      .addDropdown(dropdown => {
+        // Get provider names from registry
+        const providers = this.plugin.providerRegistry.getProviderNames();
+        const providerTypes = Object.values(ProviderType);
+        
+        // Add all available provider types
+        providerTypes.forEach(providerType => {
+          const displayName = this.getProviderDisplayName(providerType);
+          dropdown.addOption(providerType, displayName);
+        });
+        
+        dropdown.setValue(this.plugin.settings.selectedProvider);
+        dropdown.onChange(async (value) => {
+          this.plugin.settings.selectedProvider = value as ProviderType;
+          
+          // Update legacy settings for backward compatibility
+          const providerSettings = this.plugin.settings.providerSettings[value as ProviderType];
+          if (providerSettings) {
+            this.plugin.settings.apiKey = providerSettings.apiKey;
+            this.plugin.settings.llmEndpoint = providerSettings.endpoint;
+            this.plugin.settings.model = providerSettings.model;
           }
-          // Show/hide error message
-          let errorEl = text.inputEl.parentElement?.querySelector('.importer-error-message');
-          if (!errorEl && apiKeyError) {
-            errorEl = document.createElement('div');
-            errorEl.className = 'importer-error-message';
-            (errorEl as HTMLElement).style.color = 'red';
-            text.inputEl.parentElement?.appendChild(errorEl);
-          }
-          if (errorEl) errorEl.textContent = apiKeyError;
+          
+          await this.plugin.saveSettings();
+          this.renderProviderSpecificSettings();
         });
       });
-    // Initial error display for API key
-    if (!this.plugin.settings.apiKey.trim()) {
-      const input = apiKeySetting.controlEl.querySelector('input');
-      if (input) {
-        input.classList.add('importer-error');
-        const errorEl = document.createElement('div');
-        errorEl.className = 'importer-error-message';
-        errorEl.style.color = 'red';
-        errorEl.textContent = 'API key cannot be empty.';
-        input.parentElement?.appendChild(errorEl);
-      }
-    }
-
-    // LLM Endpoint URL
-    const endpointSetting = new Setting(containerEl)
-      .setName('LLM Endpoint URL')
-      .setDesc('The endpoint URL for the LLM API.')
-      .addText(text => {
-        text
-          .setPlaceholder('https://api.example.com/v1')
-          .setValue(this.plugin.settings.llmEndpoint)
-          .onChange(async (value) => {
-            if (!isValidUrl(value)) {
-              endpointError = 'Please enter a valid HTTP(S) URL (not localhost/loopback).';
-              text.inputEl.classList.add('importer-error');
-            } else {
-              endpointError = '';
-              text.inputEl.classList.remove('importer-error');
-              this.plugin.settings.llmEndpoint = value;
-              await this.plugin.saveSettings();
-            }
-            // Show/hide error message
-            let errorEl = text.inputEl.parentElement?.querySelector('.importer-error-message');
-            if (!errorEl && endpointError) {
-              errorEl = document.createElement('div');
-              errorEl.className = 'importer-error-message';
-              (errorEl as HTMLElement).style.color = 'red';
-              text.inputEl.parentElement?.appendChild(errorEl);
-            }
-            if (errorEl) errorEl.textContent = endpointError;
-          });
-      });
-    // Initial error display for endpoint
-    if (!isValidUrl(this.plugin.settings.llmEndpoint)) {
-      const input = endpointSetting.controlEl.querySelector('input');
-      if (input) {
-        input.classList.add('importer-error');
-        const errorEl = document.createElement('div');
-        errorEl.className = 'importer-error-message';
-        errorEl.style.color = 'red';
-        errorEl.textContent = 'Please enter a valid HTTP(S) URL (not localhost/loopback).';
-        input.parentElement?.appendChild(errorEl);
-      }
-    }
-
-    // LLM Model
-    new Setting(containerEl)
-      .setName('LLM Model')
-      .setDesc('The model to use for LLM requests (e.g., gpt-3.5-turbo).')
-      .addText(text =>
-        text
-          .setPlaceholder('gpt-3.5-turbo')
-          .setValue(this.plugin.settings.model)
-          .onChange(async (value) => {
-            this.plugin.settings.model = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    // Default Import Folder
+    
+    // Create container for provider-specific settings
+    this.providerSettingsContainer = containerEl.createDiv();
+    this.providerSettingsContainer.addClass('provider-specific-settings');
+    
+    // Render provider-specific settings based on selected provider
+    this.renderProviderSpecificSettings();
+    
+    // Default Import Folder (common setting)
     new Setting(containerEl)
       .setName('Default Import Folder')
       .setDesc('The default folder for imported content.')
       .addText(text =>
         text
-          .setPlaceholder('Imported/YouTube')
+          .setPlaceholder('Sources')
           .setValue(this.plugin.settings.defaultFolder)
           .onChange(async (value) => {
             this.plugin.settings.defaultFolder = value;
@@ -132,7 +82,7 @@ export class ImporterSettingTab extends PluginSettingTab {
           })
       );
 
-    // Debug Mode
+    // Debug Mode (common setting)
     new Setting(containerEl)
       .setName('Debug Mode')
       .setDesc('Enable debug mode for verbose logging.')
@@ -142,10 +92,325 @@ export class ImporterSettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             this.plugin.settings.debug = value;
             await this.plugin.saveSettings();
-            console.log('Setting Debug mode:', value);
             getLogger().setDebugMode(value);
           })
       );
+  }
 
+  /**
+   * Get a user-friendly display name for a provider type
+   */
+  private getProviderDisplayName(providerType: string): string {
+    switch (providerType) {
+      case ProviderType.REQUESTY: return 'Requesty';
+      case ProviderType.OPENROUTER: return 'OpenRouter';
+      case ProviderType.OPENAI: return 'OpenAI';
+      case ProviderType.LOCAL: return 'Local (Ollama/LM Studio)';
+      default: return providerType;
+    }
+  }
+
+  /**
+   * Render settings specific to the selected provider
+   */
+  renderProviderSpecificSettings(): void {
+    this.providerSettingsContainer.empty();
+    
+    const providerType = this.plugin.settings.selectedProvider;
+    const provider = this.plugin.providerRegistry.getProviderNames().includes(providerType) 
+      ? this.plugin.providerRegistry.getProvider(providerType)
+      : null;
+    
+    // Create section header
+    const header = this.providerSettingsContainer.createEl('h3');
+    header.setText(this.getProviderDisplayName(providerType) + ' Settings');
+    
+    this.renderApiKeySetting(providerType, provider);
+    this.renderEndpointSetting(providerType, provider);
+    this.renderModelSetting(providerType, provider);
+    
+    // Add test connection button
+    this.renderTestConnectionButton(providerType, provider);
+  }
+
+  /**
+   * Render API key setting for the provider
+   */
+  private renderApiKeySetting(providerType: string, provider: LLMProvider | null): void {
+    const requiresApiKey = provider?.requiresApiKey() !== false; // Default to true if provider is null
+    
+    if (requiresApiKey) {
+      const currentSettings = (this.plugin.settings.providerSettings[providerType as ProviderType] || {}) as PartialProviderSettings;
+      
+      const apiKeySetting = new Setting(this.providerSettingsContainer)
+        .setName('API Key')
+        .setDesc(`API Key for ${this.getProviderDisplayName(providerType)}`)
+        .addText(text => {
+          text
+            .setPlaceholder('Enter API key')
+            .setValue(currentSettings.apiKey || '')
+            .inputEl.setAttribute('type', 'password');
+          text.onChange(async (value) => {
+            // Update provider-specific setting
+            if (!this.plugin.settings.providerSettings[providerType as ProviderType]) {
+              this.plugin.settings.providerSettings[providerType as ProviderType] = {
+                apiKey: value,
+                endpoint: currentSettings.endpoint || '',
+                model: currentSettings.model || '',
+              };
+            } else {
+              this.plugin.settings.providerSettings[providerType as ProviderType]!.apiKey = value;
+            }
+            
+            // Update legacy setting for backward compatibility
+            if (providerType === this.plugin.settings.selectedProvider) {
+              this.plugin.settings.apiKey = value;
+            }
+            
+            await this.plugin.saveSettings();
+          });
+        });
+      
+      // Show validation indicator for empty API key
+      if (!currentSettings.apiKey?.trim()) {
+        const input = apiKeySetting.controlEl.querySelector('input');
+        if (input) {
+          input.classList.add('importer-error');
+          const errorEl = document.createElement('div');
+          errorEl.className = 'importer-error-message';
+          errorEl.style.color = 'red';
+          errorEl.textContent = 'API key cannot be empty.';
+          input.parentElement?.appendChild(errorEl);
+        }
+      }
+    }
+  }
+
+  /**
+   * Render endpoint setting for the provider
+   */
+  private renderEndpointSetting(providerType: string, provider: LLMProvider | null): void {
+    const requiresEndpoint = provider?.requiresEndpoint() !== false; // Default to true if provider is null
+    const defaultEndpoint = provider?.getDefaultEndpoint() || '';
+    const currentSettings = (this.plugin.settings.providerSettings[providerType as ProviderType] || {}) as PartialProviderSettings;
+    
+    if (requiresEndpoint) {
+      const endpointSetting = new Setting(this.providerSettingsContainer)
+        .setName('Endpoint')
+        .setDesc(`API Endpoint for ${this.getProviderDisplayName(providerType)}`)
+        .addText(text => {
+          text
+            .setPlaceholder(defaultEndpoint)
+            .setValue(currentSettings.endpoint || defaultEndpoint)
+            .onChange(async (value) => {
+              let endpointError = '';
+              
+              // Skip URL validation for local provider
+              if (providerType !== ProviderType.LOCAL && !isValidUrl(value)) {
+                endpointError = 'Please enter a valid HTTP(S) URL.';
+                text.inputEl.classList.add('importer-error');
+              } else {
+                text.inputEl.classList.remove('importer-error');
+                
+                // Update provider-specific setting
+                if (!this.plugin.settings.providerSettings[providerType as ProviderType]) {
+                  this.plugin.settings.providerSettings[providerType as ProviderType] = {
+                    apiKey: currentSettings.apiKey || '',
+                    endpoint: value,
+                    model: currentSettings.model || '',
+                  };
+                } else {
+                  this.plugin.settings.providerSettings[providerType as ProviderType]!.endpoint = value;
+                }
+                
+                // Update legacy setting for backward compatibility
+                if (providerType === this.plugin.settings.selectedProvider) {
+                  this.plugin.settings.llmEndpoint = value;
+                }
+                
+                await this.plugin.saveSettings();
+              }
+              
+              // Show/hide error message
+              let errorEl = text.inputEl.parentElement?.querySelector('.importer-error-message');
+              if (!errorEl && endpointError) {
+                errorEl = document.createElement('div');
+                errorEl.className = 'importer-error-message';
+                (errorEl as HTMLElement).style.color = 'red';
+                text.inputEl.parentElement?.appendChild(errorEl);
+              }
+              if (errorEl) errorEl.textContent = endpointError;
+            });
+        });
+      
+      // Initial validation for non-local providers
+      if (providerType !== ProviderType.LOCAL && currentSettings.endpoint && !isValidUrl(currentSettings.endpoint)) {
+        const input = endpointSetting.controlEl.querySelector('input');
+        if (input) {
+          input.classList.add('importer-error');
+          const errorEl = document.createElement('div');
+          errorEl.className = 'importer-error-message';
+          errorEl.style.color = 'red';
+          errorEl.textContent = 'Please enter a valid HTTP(S) URL.';
+          input.parentElement?.appendChild(errorEl);
+        }
+      }
+    }
+  }
+
+  /**
+   * Render model selection for the provider
+   */
+  private renderModelSetting(providerType: string, provider: LLMProvider | null): void {
+    const currentSettings = (this.plugin.settings.providerSettings[providerType as ProviderType] || {}) as PartialProviderSettings;
+    
+    const modelSetting = new Setting(this.providerSettingsContainer)
+      .setName('Model')
+      .setDesc(`Model to use with ${this.getProviderDisplayName(providerType)}`)
+      .addText(text => {
+        text
+          .setPlaceholder('Enter model name')
+          .setValue(currentSettings.model || '')
+          .onChange(async (value) => {
+            // Update provider-specific setting
+            if (!this.plugin.settings.providerSettings[providerType as ProviderType]) {
+              this.plugin.settings.providerSettings[providerType as ProviderType] = {
+                apiKey: currentSettings.apiKey || '',
+                endpoint: currentSettings.endpoint || '',
+                model: value,
+              };
+            } else {
+              this.plugin.settings.providerSettings[providerType as ProviderType]!.model = value;
+            }
+            
+            // Update legacy setting for backward compatibility
+            if (providerType === this.plugin.settings.selectedProvider) {
+              this.plugin.settings.model = value;
+            }
+            
+            await this.plugin.saveSettings();
+          });
+      });
+    
+    // Add note about available models when a provider is selected
+    if (provider) {
+      const modelInfoDiv = this.providerSettingsContainer.createDiv();
+      modelInfoDiv.addClass('setting-item-description');
+      modelInfoDiv.style.marginTop = '-10px';
+      modelInfoDiv.style.marginBottom = '15px';
+      modelInfoDiv.style.marginLeft = '15px';
+      
+      const fetchModelsLink = modelInfoDiv.createEl('a');
+      fetchModelsLink.textContent = 'Click to fetch available models';
+      fetchModelsLink.style.cursor = 'pointer';
+      fetchModelsLink.addEventListener('click', async () => {
+        fetchModelsLink.textContent = 'Fetching models...';
+        
+        try {
+          const models = await provider.getAvailableModels();
+          fetchModelsLink.textContent = 'Available models:';
+          modelInfoDiv.innerHTML = '';
+          modelInfoDiv.appendChild(fetchModelsLink);
+          
+          if (models.length > 0) {
+            const modelList = modelInfoDiv.createEl('ul');
+            modelList.style.marginTop = '5px';
+            modelList.style.marginBottom = '5px';
+            
+            models.forEach(model => {
+              const modelItem = modelList.createEl('li');
+              const modelLink = modelItem.createEl('a');
+              modelLink.textContent = `${model.name} (${model.id})`;
+              modelLink.style.cursor = 'pointer';
+              modelLink.addEventListener('click', async () => {
+                // Update the model field with the selected model ID
+                const input = modelSetting.controlEl.querySelector('input');
+                if (input) {
+                  (input as HTMLInputElement).value = model.id;
+                  
+                  // Update provider-specific setting
+                  if (!this.plugin.settings.providerSettings[providerType as ProviderType]) {
+                    this.plugin.settings.providerSettings[providerType as ProviderType] = {
+                      apiKey: currentSettings.apiKey || '',
+                      endpoint: currentSettings.endpoint || '',
+                      model: model.id,
+                    };
+                  } else {
+                    this.plugin.settings.providerSettings[providerType as ProviderType]!.model = model.id;
+                  }
+                  
+                  // Update legacy setting for backward compatibility
+                  if (providerType === this.plugin.settings.selectedProvider) {
+                    this.plugin.settings.model = model.id;
+                  }
+                  
+                  await this.plugin.saveSettings();
+                }
+              });
+            });
+          } else {
+            modelInfoDiv.appendText(' No models found. Check your API key and endpoint.');
+          }
+        } catch (error) {
+          fetchModelsLink.textContent = 'Failed to fetch models. Check connection.';
+          getLogger().error('Failed to fetch models', error);
+        }
+      });
+    }
+  }
+  
+  /**
+   * Render test connection button
+   */
+  private renderTestConnectionButton(providerType: string, provider: LLMProvider | null): void {
+    const testConnectionSetting = new Setting(this.providerSettingsContainer)
+      .setName('Test Connection')
+      .setDesc('Verify your connection to the LLM provider')
+      .addButton(button => {
+        button
+          .setButtonText('Test Connection')
+          .setCta()
+          .onClick(async () => {
+            const statusDiv = testConnectionSetting.descEl.createDiv();
+            statusDiv.style.marginTop = '10px';
+            statusDiv.style.fontWeight = 'bold';
+            
+            if (!provider) {
+              statusDiv.style.color = 'red';
+              statusDiv.textContent = `Provider ${providerType} not found in registry.`;
+              return;
+            }
+            
+            statusDiv.textContent = 'Testing connection...';
+            
+            try {
+              const isValid = await provider.validateConnection();
+              
+              if (isValid) {
+                statusDiv.style.color = 'green';
+                statusDiv.textContent = '✓ Connection successful!';
+              } else {
+                statusDiv.style.color = 'red';
+                statusDiv.textContent = '✗ Connection failed. Check your settings.';
+              }
+              
+              // Remove status after 5 seconds
+              setTimeout(() => {
+                statusDiv.remove();
+              }, 5000);
+              
+            } catch (error) {
+              statusDiv.style.color = 'red';
+              statusDiv.textContent = `✗ Error: ${error instanceof Error ? error.message : String(error)}`;
+              
+              getLogger().error('Test connection failed', error);
+              
+              // Remove status after 5 seconds
+              setTimeout(() => {
+                statusDiv.remove();
+              }, 5000);
+            }
+          });
+      });
   }
 }

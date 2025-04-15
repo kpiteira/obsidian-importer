@@ -18,6 +18,7 @@ I have these documents available:
 Please generate a well-structured implementation prompt following this template:
 
 ---
+We are continuing the implementation of my Obsidian Importer with the v2. Here is the next task on the list:
 I'm implementing Slice [X.Y: Slice Title] from my Obsidian Importer V2 plan.
 
 Goal: [Extract the goal from the slice]
@@ -39,6 +40,7 @@ Please provide:
 2. Unit tests that verify the core functionality
 3. Any integration code needed to connect this with existing components
 4. Instructions for manually testing this slice in Obsidian
+5. Ensure the tests pass, but only those that were written in this task
 
 When complete, I should be able to [describe the expected testable outcome based on the slice goal].
 ---

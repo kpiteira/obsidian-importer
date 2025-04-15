@@ -15,26 +15,47 @@ import { maskApiKey } from '../utils/apiKeyUtils';
  */
 export function createLLMProvider(settings: PluginSettings): LLMProvider {
   const logger = getLogger();
+  const selectedProvider = settings.selectedProvider;
   
-  // For Slice 1.1, we'll simply use the top-level settings
-  // The provider-specific settings UI will be implemented in Slice 1.2
-  logger.debugLog("Creating LLM provider with global settings", {
+  // Get provider-specific settings or fall back to legacy settings
+  const providerSettings = settings.providerSettings[selectedProvider] || {
+    apiKey: settings.apiKey,
     endpoint: settings.llmEndpoint,
-    model: settings.model,
-    apiKey: maskApiKey(settings.apiKey)
+    model: settings.model
+  };
+  
+  logger.debugLog("Creating LLM provider", {
+    providerType: selectedProvider,
+    endpoint: providerSettings.endpoint,
+    model: providerSettings.model,
+    apiKey: maskApiKey(providerSettings.apiKey)
   });
   
-  // Create Requesty provider with top-level settings
-  const requestyProvider = new RequestyProvider(
-    settings.apiKey,
-    {
-      endpoint: settings.llmEndpoint,
-      modelId: settings.model,
-      timeoutMs: 60000
-    }
-  );
-  
-  return requestyProvider;
+  // Create the appropriate provider based on the selected type
+  switch(selectedProvider) {
+    case ProviderType.REQUESTY:
+      return new RequestyProvider(
+        providerSettings.apiKey,
+        {
+          endpoint: providerSettings.endpoint,
+          modelId: providerSettings.model,
+          timeoutMs: providerSettings.timeoutMs || 60000
+        }
+      );
+      
+    // Additional provider types will be added in future slices
+    // For now, default to Requesty for other types
+    default:
+      logger.warn(`Provider type ${selectedProvider} not fully implemented yet, using Requesty`);
+      return new RequestyProvider(
+        providerSettings.apiKey,
+        {
+          endpoint: providerSettings.endpoint,
+          modelId: providerSettings.model,
+          timeoutMs: providerSettings.timeoutMs || 60000
+        }
+      );
+  }
 }
 
 /**
@@ -46,20 +67,47 @@ export function createProviderRegistry(settings: PluginSettings): LLMProviderReg
   const logger = getLogger();
   const registry = new LLMProviderRegistry();
   
-  // Register Requesty provider using top-level settings
-  const requestyProvider = new RequestyProvider(
-    settings.apiKey,
-    {
-      endpoint: settings.llmEndpoint,
-      modelId: settings.model,
-      timeoutMs: 60000
+  // Register all supported providers
+  Object.values(ProviderType).forEach(providerType => {
+    try {
+      // Get provider-specific settings
+      const providerSettings = settings.providerSettings[providerType] || {
+        apiKey: settings.apiKey,
+        endpoint: settings.llmEndpoint,
+        model: settings.model
+      };
+      
+      // Check for required settings before attempting registration
+      switch(providerType) {
+        case ProviderType.REQUESTY: 
+          if (!providerSettings.apiKey) {
+            logger.error(`Failed to register provider ${providerType}: Missing API key`);
+            return; // Skip registration for this provider
+          }
+          registry.register(new RequestyProvider(
+            providerSettings.apiKey,
+            {
+              endpoint: providerSettings.endpoint,
+              modelId: providerSettings.model,
+              timeoutMs: providerSettings.timeoutMs || 60000
+            }
+          ));
+          break;
+          
+        // Additional provider types will be added in future slices
+        // For now, we only register Requesty
+        // Other providers will be registered when they're implemented
+      }
+    } catch (error) {
+      logger.error(`Failed to register provider ${providerType}`, error);
+      // Don't rethrow - just log and continue with other providers
     }
-  );
+  });
   
-  registry.register(requestyProvider);
-  logger.debugLog("Registered provider in registry", { name: requestyProvider.getName() });
-  
-  // Other providers will be registered in future slices
+  logger.debugLog("Registered providers in registry", { 
+    count: registry.getProviderNames().length,
+    providers: registry.getProviderNames()
+  });
   
   return registry;
 }

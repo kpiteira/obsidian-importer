@@ -2,12 +2,13 @@ import { Plugin, App } from 'obsidian';
 import { ImporterSettingTab } from './src/ui/ImporterSettingTab';
 import { PluginSettings, loadSettings as loadPluginSettings, saveSettings as savePluginSettings } from './src/utils/settings';
 import { UrlInputModal } from './src/ui/UrlInputModal';
-import { createImportPipelineOrchestrator } from './src/orchestrator/orchestratorFactory';
+import { createImportPipelineOrchestrator, createProviderRegistry } from './src/orchestrator/orchestratorFactory';
 import { getLogger } from "./src/utils/importerLogger";
-
+import { LLMProviderRegistry } from './src/services/LLMProviderRegistry';
 
 export default class MyPlugin extends Plugin {
   settings: PluginSettings;
+  providerRegistry: LLMProviderRegistry;
 
   async onload() {
     await this.loadSettings();
@@ -15,6 +16,12 @@ export default class MyPlugin extends Plugin {
     // Instantiate the logger with debug mode from settings
     const logger = getLogger();
     logger.setDebugMode(this.settings.debug);
+    
+    // Create and initialize the provider registry
+    this.providerRegistry = createProviderRegistry(this.settings);
+    logger.debugLog("Initialized provider registry", { 
+      providers: this.providerRegistry.getProviderNames() 
+    });
 
     // Instantiate orchestrator using the factory with high-level dependencies only
     const orchestrator = await createImportPipelineOrchestrator(this.app, this.settings, logger);
@@ -36,8 +43,13 @@ export default class MyPlugin extends Plugin {
 
   async loadSettings() {
     this.settings = await loadPluginSettings(this);
-    // Log API key presence (not value)
     getLogger().setDebugMode(this.settings.debug);
+    
+    // Re-initialize provider registry when settings change
+    if (this.providerRegistry) {
+      this.providerRegistry.clear();
+      this.providerRegistry = createProviderRegistry(this.settings);
+    }
   }
 
   async saveSettings() {
