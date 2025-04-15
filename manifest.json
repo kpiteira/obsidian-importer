@@ -5,6 +5,10 @@
     "minAppVersion": "1.8.0",
     "description": "Imports content (e.g., YouTube videos) from a URL, processes it with an LLM, and creates a formatted note in Obsidian.",
     "author": "Karl Piteira",
-    "authorUrl": "[Your Website/GitHub Profile URL (optional)]",
-    "isDesktopOnly": false
+    "authorUrl": "https://github.com/kpiteira",
+    "isDesktopOnly": true,
+    "fundingUrl": {
+        "GitHub Sponsor": "https://github.com/sponsors/kpiteira"
+    },
+    "repository": "https://github.com/kpiteira/obsidian-importer"
 }

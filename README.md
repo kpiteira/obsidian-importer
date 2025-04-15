@@ -1,94 +1,151 @@
-# Obsidian Sample Plugin
+# Obsidian Importer
 
-This is a sample plugin for Obsidian (https://obsidian.md).
+![Obsidian Importer Banner](https://raw.githubusercontent.com/username/obsidian-importer/main/resources/banner.png)
 
-This project uses TypeScript to provide type checking and documentation.
-The repo depends on the latest plugin API (obsidian.d.ts) in TypeScript Definition format, which contains TSDoc comments describing what it does.
+An Obsidian plugin that imports content from external URLs, currently supporting YouTube videos with automatic transcription and AI-powered summarization.
 
-This sample plugin demonstrates some of the basic functionality the plugin API can do.
-- Adds a ribbon icon, which shows a Notice when clicked.
-- Adds a command "Open Sample Modal" which opens a Modal.
-- Adds a plugin setting tab to the settings page.
-- Registers a global click event and output 'click' to the console.
-- Registers a global interval which logs 'setInterval' to the console.
+## Features
 
-## First time developing plugins?
+- **URL-to-Note Conversion**: Transform online content into well-structured Obsidian notes with a single command
+- **YouTube Support**: Extract transcripts, metadata, and generate AI summaries from YouTube videos
+- **AI-Powered Analysis**: Generate summaries, key points, and concept extraction using LLM processing
+- **Customizable Storage**: Control where imported notes are stored in your Obsidian vault
+- **Progress Reporting**: Clear visual feedback during the import process
+- **Error Handling**: Comprehensive error reporting for troubleshooting
 
-Quick starting guide for new plugin devs:
+## Installation
 
-- Check if [someone already developed a plugin for what you want](https://obsidian.md/plugins)! There might be an existing plugin similar enough that you can partner up with.
-- Make a copy of this repo as a template with the "Use this template" button (login to GitHub if you don't see it).
-- Clone your repo to a local development folder. For convenience, you can place this folder in your `.obsidian/plugins/your-plugin-name` folder.
-- Install NodeJS, then run `npm i` in the command line under your repo folder.
-- Run `npm run dev` to compile your plugin from `main.ts` to `main.js`.
-- Make changes to `main.ts` (or create new `.ts` files). Those changes should be automatically compiled into `main.js`.
-- Reload Obsidian to load the new version of your plugin.
-- Enable plugin in settings window.
-- For updates to the Obsidian API run `npm update` in the command line under your repo folder.
+### From Obsidian Community Plugins
 
-## Releasing new releases
+1. Open Obsidian and go to Settings
+2. Navigate to "Community Plugins" and disable "Safe Mode" if enabled
+3. Click "Browse" and search for "Obsidian Importer"
+4. Click "Install" and then "Enable" the plugin
 
-- Update your `manifest.json` with your new version number, such as `1.0.1`, and the minimum Obsidian version required for your latest release.
-- Update your `versions.json` file with `"new-plugin-version": "minimum-obsidian-version"` so older versions of Obsidian can download an older version of your plugin that's compatible.
-- Create new GitHub release using your new version number as the "Tag version". Use the exact version number, don't include a prefix `v`. See here for an example: https://github.com/obsidianmd/obsidian-sample-plugin/releases
-- Upload the files `manifest.json`, `main.js`, `styles.css` as binary attachments. Note: The manifest.json file must be in two places, first the root path of your repository and also in the release.
-- Publish the release.
+### Manual Installation
 
-> You can simplify the version bump process by running `npm version patch`, `npm version minor` or `npm version major` after updating `minAppVersion` manually in `manifest.json`.
-> The command will bump version in `manifest.json` and `package.json`, and add the entry for the new version to `versions.json`
+1. Download the latest release (`main.js`, `manifest.json`, `styles.css`) from the [GitHub releases page](https://github.com/username/obsidian-importer/releases)
+2. Create a folder named `obsidian-importer` in your vault's `.obsidian/plugins/` directory
+3. Copy the downloaded files into this folder
+4. Restart Obsidian and enable the plugin in Settings → Community Plugins
 
-## Adding your plugin to the community plugin list
+## Usage
 
-- Check the [plugin guidelines](https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines).
-- Publish an initial version.
-- Make sure you have a `README.md` file in the root of your repo.
-- Make a pull request at https://github.com/obsidianmd/obsidian-releases to add your plugin.
+### Basic Usage
 
-## How to use
+1. Open your Obsidian vault
+2. Open the Command Palette (`Ctrl/Cmd + P`)
+3. Search for "Import from URL..." and select it
+4. Paste a YouTube URL into the input field and press Enter
+5. Wait for the import process to complete
+6. A new note will be created with the imported content
 
-- Clone this repo.
-- Make sure your NodeJS is at least v16 (`node --version`).
-- `npm i` or `yarn` to install dependencies.
-- `npm run dev` to start compilation in watch mode.
+### Example
 
-## Manually installing the plugin
+When you import a YouTube video URL like `https://www.youtube.com/watch?v=dQw4w9WgXcQ`:
 
-- Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
+1. The plugin validates the URL
+2. Detects that it's a YouTube video
+3. Downloads the transcript and metadata
+4. Processes the content with an LLM
+5. Creates a note with the following structure:
+   - Video title and metadata
+   - AI-generated summary
+   - Key points from the video
+   - Important concepts mentioned
+   - Link back to the original content
 
-## Improve code quality with eslint (optional)
-- [ESLint](https://eslint.org/) is a tool that analyzes your code to quickly find problems. You can run ESLint against your plugin to find common bugs and ways to improve your code. 
-- To use eslint with this project, make sure to install eslint from terminal:
-  - `npm install -g eslint`
-- To use eslint to analyze this project use this command:
-  - `eslint main.ts`
-  - eslint will then create a report with suggestions for code improvement by file and line number.
-- If your source code is in a folder, such as `src`, you can use eslint with this command to analyze all files in that folder:
-  - `eslint .\src\`
+## Configuration
 
-## Funding URL
+Navigate to Settings → Obsidian Importer to configure:
 
-You can include funding URLs where people who use your plugin can financially support it.
+1. **API Key**: Your LLM provider API key (required for AI processing)
+2. **LLM Endpoint**: The API endpoint for LLM processing (default: Requesty)
+3. **Model**: The AI model to use (default: google/gemini-2.0-flash-exp)
+4. **Default Folder**: Where imported notes will be stored (default: "Sources")
+5. **Debug Mode**: Enable for detailed logging in the developer console
 
-The simple way is to set the `fundingUrl` field to your link in your `manifest.json` file:
+## LLM Provider Setup
 
-```json
-{
-    "fundingUrl": "https://buymeacoffee.com"
-}
-```
+### Requesty Setup (Default)
 
-If you have multiple URLs, you can also do:
+1. Sign up at [Requesty.io](https://requesty.io)
+2. Generate an API key from your account dashboard
+3. Copy the API key to your plugin settings
 
-```json
-{
-    "fundingUrl": {
-        "Buy Me a Coffee": "https://buymeacoffee.com",
-        "GitHub Sponsor": "https://github.com/sponsors",
-        "Patreon": "https://www.patreon.com/"
-    }
-}
-```
+### Other Providers
 
-## API Documentation
+The plugin supports any OpenAI-compatible API endpoint. To use a different provider:
 
-See https://github.com/obsidianmd/obsidian-api
+1. Change the LLM Endpoint URL in settings
+2. Enter the appropriate API key
+3. Select a compatible model name
+
+## Troubleshooting
+
+### Common Issues
+
+1. **"Invalid URL" Error**
+   - Ensure the URL begins with `http://` or `https://`
+   - Check that it's not a localhost or private network IP
+
+2. **"Transcript not available" Error**
+   - Some YouTube videos don't have transcripts available
+   - Try another video or check if manual captions are available
+
+3. **LLM Processing Errors**
+   - Verify your API key is entered correctly
+   - Check your internet connection
+   - Ensure your API key has sufficient credits
+
+### Debug Mode
+
+Enable debug mode in settings to get detailed logs in the developer console:
+
+1. Open Settings → Obsidian Importer
+2. Toggle "Debug Mode" on
+3. Open Developer Tools (Ctrl/Cmd + Shift + I)
+4. Check the console for detailed logs
+
+## Building from Source
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/username/obsidian-importer.git
+   ```
+
+2. Install dependencies:
+   ```bash
+   cd obsidian-importer
+   npm install
+   ```
+
+3. Build the plugin:
+   ```bash
+   npm run build
+   ```
+
+4. For development with hot reload:
+   ```bash
+   npm run dev
+   ```
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Acknowledgments
+
+- [Inspiration by mbramani: obsidian-yt-video-summarizer](https://github.com/mbramani/obsidian-yt-video-summarizer)
+- [Obsidian](https://obsidian.md) for the wonderful knowledge base application
+- [Requesty.io](https://requesty.io) for LLM API access

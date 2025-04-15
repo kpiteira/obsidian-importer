@@ -130,7 +130,7 @@ This task wires the previous work done to create the ImporterSettingsTab in main
 ## Release Preparation
 
 ### Task 1.8.1: Documentation
-- [ ] **Task 1.8.1.1**: Create comprehensive README.md with installation and usage instructions
+- [ ] **Task 1.8.1.1**: Replace the existing README.md with a comprehensive README.md with build, packaging, installation and usage instructions
 - [ ] **Task 1.8.1.2**: Document configuration options and LLM provider setup requirements
 - [ ] **Task 1.8.1.3**: Add screenshots and examples for the plugin in action
 - [ ] **Task 1.8.1.4**: Include troubleshooting section for common issues and their solutions
@@ -139,4 +139,4 @@ This task wires the previous work done to create the ImporterSettingsTab in main
 - [ ] **Task 1.8.2.1**: Review and improve error messages for clarity and actionability
 - [ ] **Task 1.8.2.2**: Ensure consistent code style and documentation with ESLint and JSDoc
 - [ ] **Task 1.8.2.3**: Optimize build size by removing development dependencies and unnecessary imports
-- [ ] **Task 1.8.2.4**: Perform final testing across different Obsidian versions and platforms
+- [ ] **Task 1.8.2.4**: Do the final packaging for distribution of the plugin

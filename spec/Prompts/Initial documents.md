@@ -116,3 +116,11 @@ Now I created a detailed task list which goal is to feed to an AI that will most
 
 My plan is probably to feed it alongside with the PRD and architecture, and ask the AI to work on it. I'm not sure yet whether I feed everything and just ask it to go do it, or if I do it step by step, mostly with the objective of not consuming too many tokens and have this Unite not be too expensive. Let me know what you think on that as well.
 ```
+
+## Starting v2
+
+Before starting v2, I want to revise my MVP architecture document to make sure we start on solid basis. For that, I am going to ask Copilot to understand the deviation between MVP architecture document and the actual implementation: 
+
+```text
+I succesfully implemented my MVP which architecture was based on the document obsidian_importer_architecture. I would like to understand the deviation between my codebase and the architecture document, and to generate a new architecture document based on the actual implementation so that I can use it for a v2.
+```

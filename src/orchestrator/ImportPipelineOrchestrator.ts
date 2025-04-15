@@ -187,17 +187,19 @@ export class ImportPipelineOrchestrator {
       try {
         urlObj = new URL(url);
       } catch (err) {
-        throw { userMessage: "The provided URL is not valid." };
+        throw { userMessage: "Invalid URL format. Please enter a complete URL including 'https://'." };
       }
       // Handler existence check
       handler = detectContentType(urlObj);
       if (!handler) {
-        throw { userMessage: `Unsupported or unrecognized content type for URL: ${url}` };
+        throw { 
+          userMessage: `This content type is not supported yet. Currently, only YouTube videos are supported.`
+        };
       }
     } catch (err: any) {
       let userMessage = "Invalid or unsupported URL.";
       if (err?.userMessage) userMessage = err.userMessage;
-      else if (err?.name === "NetworkError") userMessage = "Network error during URL validation.";
+      else if (err?.name === "NetworkError") userMessage = "Network connection error. Please check your internet connection and try again.";
       else if (typeof err === "string") userMessage = err;
       logger?.error?.("[URL Validation] Error:", userMessage, err);
       this.emitError({
@@ -220,8 +222,8 @@ export class ImportPipelineOrchestrator {
     } catch (err: any) {
       let userMessage = "Failed to download content. Please check your network connection or the source URL.";
       if (err?.userMessage) userMessage = err.userMessage;
-      else if (err?.name === "TranscriptUnavailableError") userMessage = "Transcript is unavailable for this content.";
-      else if (err?.name === "NetworkError") userMessage = "Network error during content download.";
+      else if (err?.name === "TranscriptUnavailableError") userMessage = "This video doesn't have an available transcript. Try a different video or one with captions enabled.";
+      else if (err?.name === "NetworkError") userMessage = "Network connection issue while downloading content. Please check your internet and try again.";
       else if (typeof err === "string") userMessage = err;
       logger?.error?.("[Content Download] Error:", userMessage, err);
       this.emitError({
@@ -238,13 +240,14 @@ export class ImportPipelineOrchestrator {
       llmPrompt = handler.getPrompt(metadata);
       llmRawResponse = await this.deps.llmProvider.callLLM(llmPrompt);
       if(!handler.validateLLMOutput(handler.parseLLMResponse(llmRawResponse))){
-        throw new Error("LLM output validation failed.");
+        throw new Error("LLM output validation failed. The AI response doesn't match the expected format.");
       }
       noteContent = llmRawResponse;
     } catch (err: any) {
-      let userMessage = "AI processing failed. Please try again later.";
+      let userMessage = "AI processing failed. Please verify your API key and try again.";
       if (err?.userMessage) userMessage = err.userMessage;
-      else if (err?.name === "LLMError") userMessage = "A problem occurred while processing with the AI model.";
+      else if (err?.name === "LLMError") userMessage = "Error connecting to the AI service. Please check your API key and endpoint in settings.";
+      else if (err?.message?.includes("validate")) userMessage = "The AI generated an invalid response format. Try with a different model or check your settings.";
       else if (typeof err === "string") userMessage = err;
       logger?.error?.("[LLM Processing] Error:", userMessage, err);
       this.emitError({
@@ -271,10 +274,11 @@ export class ImportPipelineOrchestrator {
       // 5.6 Write note using pure file writer
       notePath = await this.deps.noteWriter.writeNote(folderPath, filename, handler.getNoteContent(noteContent, metadata));
     } catch (err: any) {
-      let userMessage = "Failed to write the note to your vault. Please check your file system permissions.";
+      let userMessage = "Failed to create the note in your vault.";
       if (err?.userMessage) userMessage = err.userMessage;
-      else if (err?.code === "EACCES" || err?.code === "EPERM") userMessage = "Permission denied while writing the note.";
-      else if (err?.name === "FileIOError") userMessage = "A file system error occurred while saving the note.";
+      else if (err?.code === "EACCES" || err?.code === "EPERM") userMessage = "Permission denied while writing the note. Check your vault permissions.";
+      else if (err?.name === "FileIOError") userMessage = "File system error while saving the note. Verify the folder path exists in settings.";
+      else if (err?.message?.includes("already exists")) userMessage = "A note with this name already exists. Future versions will handle this better.";
       else if (typeof err === "string") userMessage = err;
       logger?.error?.("[Note Writing] Error:", userMessage, err);
       this.emitError({
