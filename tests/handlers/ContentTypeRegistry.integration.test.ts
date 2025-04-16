@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ContentTypeRegistry } from '../../src/handlers/ContentTypeRegistry';
 import { YouTubeHandler } from '../../src/handlers/YouTubeHandler';
 import { MediumHandler } from "../../src/handlers/MediumHandler";
+import { GoodreadsHandler } from "../../src/handlers/GoodreadsHandler";
 import { LLMProvider } from '../../src/services/LLMProvider';
 import { fetchWebPageContent } from '../../src/utils/webFetcher';
 
@@ -187,5 +188,30 @@ describe("ContentTypeRegistry integration with MediumHandler", () => {
     
     expect(handler).toBeDefined();
     expect(handler.type).toBe("medium");
+  });
+});
+
+describe("ContentTypeRegistry integration with GoodreadsHandler", () => {
+  let registry: ContentTypeRegistry;
+  
+  beforeEach(() => {
+    registry = new ContentTypeRegistry();
+    registry.register(new GoodreadsHandler());
+  });
+  
+  test("should detect Goodreads URLs via URL-based detection", async () => {
+    const goodreadsUrl = "https://www.goodreads.com/book/show/12345";
+    const handler = await registry.detectContentType(goodreadsUrl);
+    
+    expect(handler).toBeDefined();
+    expect(handler.type).toBe("goodreads");
+  });
+  
+  test("should detect Goodreads subdomain URLs", async () => {
+    const goodreadsSubdomainUrl = "https://www.goodreads.com/author/show/54321.Some_Author";
+    const handler = await registry.detectContentType(goodreadsSubdomainUrl);
+    
+    expect(handler).toBeDefined();
+    expect(handler.type).toBe("goodreads");
   });
 });

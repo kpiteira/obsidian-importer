@@ -13,6 +13,7 @@ import { maskApiKey } from '../utils/apiKeyUtils';
 import { ContentTypeRegistry } from '../handlers/ContentTypeRegistry';
 import { YouTubeHandler } from '../handlers/YouTubeHandler';
 import { MediumHandler } from '../handlers/MediumHandler';
+import { GoodreadsHandler } from '../handlers/GoodreadsHandler';
 
 /**
  * Create an LLM provider based on the current plugin settings
@@ -270,6 +271,14 @@ export function createContentTypeRegistry(): ContentTypeRegistry {
     logger.debugLog("Registered MediumHandler");
   } catch (error) {
     logger.error("Failed to register MediumHandler", error);
+  }
+  
+  // Register Goodreads handler
+  try {
+    registry.register(new GoodreadsHandler());
+    logger.debugLog("Registered GoodreadsHandler");
+  } catch (error) {
+    logger.error("Failed to register GoodreadsHandler", error);
   }
   
   // More handlers will be added in future slices
