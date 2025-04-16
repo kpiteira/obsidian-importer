@@ -133,7 +133,7 @@ describe('BaseOpenAIProvider', () => {
     expect(result).toBe('This is a test response with options');
     
     const call = (requestUrl as any).mock.calls[0][0];
-    expect(call.url).toBe('https://custom-endpoint.example.com');
+    expect(call.url).toBe('https://custom-endpoint.example.com/chat/completions');
     
     const body = JSON.parse(call.body);
     expect(body.model).toBe('custom-model');
@@ -170,6 +170,6 @@ describe('BaseOpenAIProvider', () => {
     (requestUrl as any).mockResolvedValue(mockInvalidResponse);
     
     const prompt = 'Test prompt with invalid response';
-    await expect(provider.callLLM(prompt)).rejects.toThrow('Failed to call TestProvider API: Invalid response format from TestProvider API.');
+    await expect(provider.callLLM(prompt)).rejects.toThrow('API call failed after 3 attempts: Failed to call TestProvider API: Invalid response format from TestProvider API');
   });
 });

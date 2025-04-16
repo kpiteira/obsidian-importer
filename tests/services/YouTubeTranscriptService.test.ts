@@ -1,8 +1,9 @@
 // Mock the Obsidian API for all tests in this file. See tests/__mocks__/obsidian.ts for details.
 vi.mock('obsidian');
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
-import * as urlUtils from "../../src/utils/url";
-import { fetchYouTubeTranscript, YouTubeTranscriptError, YouTubeTranscriptErrorCode } from "../../src/services/YouTubeTranscriptService";
+import * as youtubeUtils from "../../src/utils/youtube";
+import * as obsidian from "obsidian";
+import { fetchYouTubeTranscript, YouTubeTranscriptError } from "../../src/services/YouTubeTranscriptService";
 
 // Helper: minimal valid player response with English captions
 const validPlayerResponse = {
@@ -44,124 +45,148 @@ function makeVideoPageBody(playerResponse: any) {
 }
 
 describe("fetchYouTubeTranscript", () => {
-  let originalFetch: typeof global.fetch;
-
+  // Create a proper mock for the requestUrl function
+  const mockedRequestUrl = vi.fn();
+  
   beforeEach(() => {
-    originalFetch = global.fetch;
-    vi.stubGlobal("fetch", vi.fn());
+    vi.resetAllMocks();
+    
+    // Replace the original requestUrl with our mock
+    vi.spyOn(obsidian, 'requestUrl').mockImplementation(mockedRequestUrl);
+    
+    // Mock the extractYouTubeVideoId function from youtube.ts
+    vi.spyOn(youtubeUtils, "extractYouTubeVideoId").mockImplementation((url: string) => {
+      if (url.includes("youtube.com/watch?v=") || url.includes("youtu.be/")) {
+        return "dQw4w9WgXcQ"; // Mock video ID
+      }
+      return null;
+    });
   });
 
   afterEach(() => {
-    global.fetch = originalFetch;
     vi.restoreAllMocks();
   });
 
   it("fetches and parses transcript successfully", async () => {
-    // Mock fetch for video page and captions
-    (global.fetch as any)
-      .mockResolvedValueOnce({
-        ok: true,
-        text: async () => makeVideoPageBody(validPlayerResponse)
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        text: async () => validCaptionsXML
-      });
+    // Mock requestUrl for the video page request
+    mockedRequestUrl.mockResolvedValueOnce({
+      status: 200,
+      text: makeVideoPageBody(validPlayerResponse)
+    });
+    
+    // Mock requestUrl for the captions request
+    mockedRequestUrl.mockResolvedValueOnce({
+      status: 200,
+      text: validCaptionsXML
+    });
 
-    // Mock DOMParser on the global object
-    const originalDOMParser = (global as any).DOMParser;
-    const originalDocument = (global as any).document;
+    // Mock DOMParser for XML parsing
     const mockTextNode = (value: string) => ({
       textContent: value
     });
-    const mockDoc = {
-      getElementsByTagName: (tag: string) =>
-        tag === "text"
-          ? [mockTextNode("Hello"), mockTextNode("world!")]
-          : []
-    };
-    (global as any).DOMParser = function () {
-      return {
-        parseFromString: () => mockDoc
-      };
-    };
-    (global as any).document = {
-      createElement: () => ({
-        set innerHTML(val: string) {
-          this._val = val;
-        },
-        get value() {
-          return this._val;
-        }
+    
+    // Mock document.getElementsByTagName
+    global.DOMParser = vi.fn().mockImplementation(() => ({
+      parseFromString: vi.fn().mockReturnValue({
+        getElementsByTagName: (tag: string) => 
+          tag === "text" 
+            ? [mockTextNode("Hello"), mockTextNode("world!")]
+            : []
       })
-    };
+    }));
 
     const transcript = await fetchYouTubeTranscript("https://youtube.com/watch?v=dQw4w9WgXcQ");
     expect(transcript).toBe("Hello world!");
-
-    // Restore original DOMParser and document
-    (global as any).DOMParser = originalDOMParser;
-    (global as any).document = originalDocument;
   });
 
   it("throws INVALID_URL for invalid YouTube URL", async () => {
-    await expect(fetchYouTubeTranscript("not-a-youtube-url")).rejects.toThrowError(
-      /Invalid YouTube URL or unable to extract video ID\./
-    );
+    // Make extractYouTubeVideoId return null for this test
+    (youtubeUtils.extractYouTubeVideoId as any).mockReturnValueOnce(null);
+    
+    await expect(fetchYouTubeTranscript("not-a-youtube-url"))
+      .rejects
+      .toThrow(expect.objectContaining({
+        code: "INVALID_URL"
+      }));
   });
 
   it("throws FETCH_VIDEO_FAILED on network error fetching video page", async () => {
-    (global.fetch as any).mockRejectedValueOnce(new Error("Network down"));
-    await expect(fetchYouTubeTranscript("https://youtube.com/watch?v=dQw4w9WgXcQ")).rejects.toMatchObject({
-      code: "FETCH_VIDEO_FAILED"
-    });
+    // Mock requestUrl to throw an error for network failure
+    mockedRequestUrl.mockRejectedValueOnce(new Error("Network down"));
+    
+    await expect(fetchYouTubeTranscript("https://youtube.com/watch?v=dQw4w9WgXcQ"))
+      .rejects
+      .toThrow(expect.objectContaining({
+        code: "FETCH_VIDEO_FAILED"
+      }));
   });
 
   it("throws FETCH_VIDEO_FAILED if video page fetch is not ok", async () => {
-    (global.fetch as any).mockResolvedValueOnce({ ok: false });
-    await expect(fetchYouTubeTranscript("https://youtube.com/watch?v=dQw4w9WgXcQ")).rejects.toMatchObject({
-      code: "FETCH_VIDEO_FAILED"
+    // Mock requestUrl to return non-200 status
+    mockedRequestUrl.mockResolvedValueOnce({
+      status: 404,
+      text: "Not found"
     });
+    
+    await expect(fetchYouTubeTranscript("https://youtube.com/watch?v=dQw4w9WgXcQ"))
+      .rejects
+      .toThrow(expect.objectContaining({
+        code: "FETCH_VIDEO_FAILED"
+      }));
   });
 
   it("throws PLAYER_RESPONSE_NOT_FOUND if player response is missing", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      text: async () => "no player response here"
+    // Mock requestUrl to return HTML without player response
+    mockedRequestUrl.mockResolvedValueOnce({
+      status: 200,
+      text: "no player response here"
     });
-    await expect(fetchYouTubeTranscript("https://youtube.com/watch?v=dQw4w9WgXcQ")).rejects.toMatchObject({
-      code: "PLAYER_RESPONSE_NOT_FOUND"
-    });
+    
+    await expect(fetchYouTubeTranscript("https://youtube.com/watch?v=dQw4w9WgXcQ"))
+      .rejects
+      .toThrow(expect.objectContaining({
+        code: "PLAYER_RESPONSE_NOT_FOUND"
+      }));
   });
 
   it("throws PLAYER_RESPONSE_PARSE_ERROR if player response JSON is invalid", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      text: async () => 'var ytInitialPlayerResponse = {not: "json"};'
+    // Mock requestUrl to return HTML with invalid JSON in player response
+    mockedRequestUrl.mockResolvedValueOnce({
+      status: 200,
+      text: 'var ytInitialPlayerResponse = {not valid json};'
     });
-    await expect(fetchYouTubeTranscript("https://youtube.com/watch?v=dQw4w9WgXcQ")).rejects.toMatchObject({
-      code: "PLAYER_RESPONSE_PARSE_ERROR"
-    });
+    
+    await expect(fetchYouTubeTranscript("https://youtube.com/watch?v=dQw4w9WgXcQ"))
+      .rejects
+      .toThrow(expect.objectContaining({
+        code: "PLAYER_RESPONSE_PARSE_ERROR"
+      }));
   });
 
   it("throws NO_CAPTIONS if captionTracks is null", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      text: async () => makeVideoPageBody(noCaptionTracksPlayerResponse)
+    mockedRequestUrl.mockResolvedValueOnce({
+      status: 200,
+      text: makeVideoPageBody(noCaptionTracksPlayerResponse)
     });
-    await expect(fetchYouTubeTranscript("https://youtube.com/watch?v=dQw4w9WgXcQ")).rejects.toMatchObject({
-      code: "NO_CAPTIONS"
-    });
+    
+    await expect(fetchYouTubeTranscript("https://youtube.com/watch?v=dQw4w9WgXcQ"))
+      .rejects
+      .toThrow(expect.objectContaining({
+        code: "NO_CAPTIONS" 
+      }));
   });
 
   it("throws NO_CAPTIONS if captionTracks is empty", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      text: async () => makeVideoPageBody(emptyCaptionTracksPlayerResponse)
+    mockedRequestUrl.mockResolvedValueOnce({
+      status: 200,
+      text: makeVideoPageBody(emptyCaptionTracksPlayerResponse)
     });
-    await expect(fetchYouTubeTranscript("https://youtube.com/watch?v=dQw4w9WgXcQ")).rejects.toMatchObject({
-      code: "NO_CAPTIONS"
-    });
+    
+    await expect(fetchYouTubeTranscript("https://youtube.com/watch?v=dQw4w9WgXcQ"))
+      .rejects
+      .toThrow(expect.objectContaining({
+        code: "NO_CAPTIONS"
+      }));
   });
 
   it("throws NO_CAPTION_TRACKS if no valid track is found", async () => {
@@ -172,122 +197,112 @@ describe("fetchYouTubeTranscript", () => {
         }
       }
     };
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      text: async () => makeVideoPageBody(playerResponse)
+    
+    mockedRequestUrl.mockResolvedValueOnce({
+      status: 200,
+      text: makeVideoPageBody(playerResponse)
     });
-    await expect(fetchYouTubeTranscript("https://youtube.com/watch?v=dQw4w9WgXcQ")).rejects.toMatchObject({
-      code: "NO_CAPTION_TRACKS"
-    });
+    
+    await expect(fetchYouTubeTranscript("https://youtube.com/watch?v=dQw4w9WgXcQ"))
+      .rejects
+      .toThrow(expect.objectContaining({
+        code: "NO_CAPTION_TRACKS"
+      }));
   });
 
   it("throws FETCH_CAPTIONS_FAILED on network error fetching captions", async () => {
-    (global.fetch as any)
+    mockedRequestUrl
       .mockResolvedValueOnce({
-        ok: true,
-        text: async () => makeVideoPageBody(validPlayerResponse)
+        status: 200,
+        text: makeVideoPageBody(validPlayerResponse)
       })
       .mockRejectedValueOnce(new Error("Network down"));
-    await expect(fetchYouTubeTranscript("https://youtube.com/watch?v=dQw4w9WgXcQ")).rejects.toMatchObject({
-      code: "FETCH_CAPTIONS_FAILED"
-    });
+    
+    await expect(fetchYouTubeTranscript("https://youtube.com/watch?v=dQw4w9WgXcQ"))
+      .rejects
+      .toThrow(expect.objectContaining({
+        code: "FETCH_CAPTIONS_FAILED"
+      }));
   });
 
   it("throws FETCH_CAPTIONS_FAILED if captions fetch is not ok", async () => {
-    (global.fetch as any)
+    mockedRequestUrl
       .mockResolvedValueOnce({
-        ok: true,
-        text: async () => makeVideoPageBody(validPlayerResponse)
+        status: 200,
+        text: makeVideoPageBody(validPlayerResponse)
       })
-      .mockResolvedValueOnce({ ok: false });
-    await expect(fetchYouTubeTranscript("https://youtube.com/watch?v=dQw4w9WgXcQ")).rejects.toMatchObject({
-      code: "FETCH_CAPTIONS_FAILED"
-    });
+      .mockResolvedValueOnce({
+        status: 404,
+        text: "Not found"
+      });
+    
+    await expect(fetchYouTubeTranscript("https://youtube.com/watch?v=dQw4w9WgXcQ"))
+      .rejects
+      .toThrow(expect.objectContaining({
+        code: "FETCH_CAPTIONS_FAILED"
+      }));
   });
 
   it("throws CAPTIONS_PARSE_ERROR if captions XML is invalid", async () => {
-    // Mock DOMParser and document for this test
-    const originalDOMParser = (global as any).DOMParser;
-    const originalDocument = (global as any).document;
-    (global as any).DOMParser = function () {
-      return {
-        parseFromString: () => { throw new Error("bad xml"); }
-      };
-    };
-    (global as any).document = {
-      createElement: () => ({
-        set innerHTML(val: string) {
-          this._val = val;
-        },
-        get value() {
-          return this._val;
-        }
-      })
-    };
-
-    (global.fetch as any)
+    mockedRequestUrl
       .mockResolvedValueOnce({
-        ok: true,
-        text: async () => makeVideoPageBody(validPlayerResponse)
+        status: 200,
+        text: makeVideoPageBody(validPlayerResponse)
       })
       .mockResolvedValueOnce({
-        ok: true,
-        text: async () => "<not-xml"
+        status: 200,
+        text: "<invalid>xml"
       });
-    await expect(fetchYouTubeTranscript("https://youtube.com/watch?v=dQw4w9WgXcQ")).rejects.toMatchObject({
-      code: "CAPTIONS_PARSE_ERROR"
-    });
-
-    (global as any).DOMParser = originalDOMParser;
-    (global as any).document = originalDocument;
+    
+    // Mock DOMParser to throw error when parsing invalid XML
+    global.DOMParser = vi.fn().mockImplementation(() => ({
+      parseFromString: vi.fn().mockImplementation(() => {
+        throw new Error("XML parsing error");
+      })
+    }));
+    
+    await expect(fetchYouTubeTranscript("https://youtube.com/watch?v=dQw4w9WgXcQ"))
+      .rejects
+      .toThrow(expect.objectContaining({
+        code: "CAPTIONS_PARSE_ERROR"
+      }));
   });
 
   it("throws CAPTIONS_PARSE_ERROR if captions XML has no text nodes", async () => {
-    // Mock DOMParser and document for this test
-    const originalDOMParser = (global as any).DOMParser;
-    const originalDocument = (global as any).document;
-    (global as any).DOMParser = function () {
-      return {
-        parseFromString: () => ({
-          getElementsByTagName: (tag: string) => []
-        })
-      };
-    };
-    (global as any).document = {
-      createElement: () => ({
-        set innerHTML(val: string) {
-          this._val = val;
-        },
-        get value() {
-          return this._val;
-        }
-      })
-    };
-
-    (global.fetch as any)
+    mockedRequestUrl
       .mockResolvedValueOnce({
-        ok: true,
-        text: async () => makeVideoPageBody(validPlayerResponse)
+        status: 200,
+        text: makeVideoPageBody(validPlayerResponse)
       })
       .mockResolvedValueOnce({
-        ok: true,
-        text: async () => "<transcript></transcript>"
+        status: 200,
+        text: "<transcript></transcript>"
       });
-    await expect(fetchYouTubeTranscript("https://youtube.com/watch?v=dQw4w9WgXcQ")).rejects.toMatchObject({
-      code: "CAPTIONS_PARSE_ERROR"
-    });
-
-    (global as any).DOMParser = originalDOMParser;
-    (global as any).document = originalDocument;
+    
+    // Mock DOMParser to return document with no text elements
+    global.DOMParser = vi.fn().mockImplementation(() => ({
+      parseFromString: vi.fn().mockReturnValue({
+        getElementsByTagName: () => []
+      })
+    }));
+    
+    await expect(fetchYouTubeTranscript("https://youtube.com/watch?v=dQw4w9WgXcQ"))
+      .rejects
+      .toThrow(expect.objectContaining({
+        code: "CAPTIONS_PARSE_ERROR"
+      }));
   });
 
   it("throws UNKNOWN for unexpected errors", async () => {
-    const spy = vi.spyOn(urlUtils, "extractYouTubeVideoId").mockImplementation(() => {
-      throw new Error("unexpected");
+    // Mock extractYouTubeVideoId to throw an unexpected error
+    (youtubeUtils.extractYouTubeVideoId as any).mockImplementationOnce(() => {
+      throw new Error("Unexpected error");
     });
-    await expect(fetchYouTubeTranscript("https://youtube.com/watch?v=dQw4w9WgXcQ")).rejects.toMatchObject({
-      code: "UNKNOWN"
-    });
-    spy.mockRestore();
+    
+    await expect(fetchYouTubeTranscript("https://youtube.com/watch?v=dQw4w9WgXcQ"))
+      .rejects
+      .toThrow(expect.objectContaining({
+        code: "UNKNOWN"
+      }));
   });
 });

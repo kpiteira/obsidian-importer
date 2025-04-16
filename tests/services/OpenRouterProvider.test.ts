@@ -29,7 +29,7 @@ describe('OpenRouterProvider', () => {
   
   describe('getName', () => {
     it('returns the correct provider name', () => {
-      expect(provider.getName()).toBe('OpenRouter');
+      expect(provider.getName()).toBe('openrouter');
     });
   });
   
@@ -62,6 +62,7 @@ describe('OpenRouterProvider', () => {
           'HTTP-Referer': 'https://obsidian.md/plugins',
           'X-Title': 'Obsidian Importer'
         },
+        throw: false
       });
       
       expect(models).toEqual([

@@ -104,7 +104,7 @@ describe('RequestyProvider', () => {
     expect(result).toBe('This is a test response with options');
     
     const call = (requestUrl as any).mock.calls[0][0];
-    expect(call.url).toBe('https://custom-endpoint.example.com');
+    expect(call.url).toBe('https://custom-endpoint.example.com/chat/completions');
     
     const body = JSON.parse(call.body);
     expect(body.model).toBe('gpt-4');
