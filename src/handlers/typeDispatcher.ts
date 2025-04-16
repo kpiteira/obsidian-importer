@@ -1,5 +1,6 @@
 import { ContentTypeHandler } from "./ContentTypeHandler";
 import { YouTubeHandler } from "./YouTubeHandler";
+import { MediumHandler } from "./MediumHandler";
 
 // Registry for all handlers (singleton)
 let handlers: ContentTypeHandler[] = [];
@@ -43,3 +44,4 @@ export function getAllContentTypeHandlers(): ContentTypeHandler[] {
 
 // Pre-register default handlers
 registerContentTypeHandler(new YouTubeHandler());
+registerContentTypeHandler(new MediumHandler());

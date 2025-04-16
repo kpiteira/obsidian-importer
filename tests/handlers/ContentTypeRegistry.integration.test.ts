@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ContentTypeRegistry } from '../../src/handlers/ContentTypeRegistry';
 import { YouTubeHandler } from '../../src/handlers/YouTubeHandler';
+import { MediumHandler } from "../../src/handlers/MediumHandler";
 import { LLMProvider } from '../../src/services/LLMProvider';
 import { fetchWebPageContent } from '../../src/utils/webFetcher';
 
@@ -161,5 +162,30 @@ describe('ContentTypeRegistry Integration Tests', () => {
     
     // Verify the download method can access cached content
     expect(mockGenericHandler.download).not.toHaveBeenCalled();
+  });
+});
+
+describe("ContentTypeRegistry integration with MediumHandler", () => {
+  let registry: ContentTypeRegistry;
+  
+  beforeEach(() => {
+    registry = new ContentTypeRegistry();
+    registry.register(new MediumHandler());
+  });
+  
+  test("should detect Medium URLs via URL-based detection", async () => {
+    const mediumUrl = "https://medium.com/some-article";
+    const handler = await registry.detectContentType(mediumUrl);
+    
+    expect(handler).toBeDefined();
+    expect(handler.type).toBe("medium");
+  });
+  
+  test("should detect Medium subdomain URLs", async () => {
+    const mediumSubdomainUrl = "https://javascript.medium.com/some-article";
+    const handler = await registry.detectContentType(mediumSubdomainUrl);
+    
+    expect(handler).toBeDefined();
+    expect(handler.type).toBe("medium");
   });
 });

@@ -12,6 +12,7 @@ import { OllamaProvider } from '../services/OllamaProvider';
 import { maskApiKey } from '../utils/apiKeyUtils';
 import { ContentTypeRegistry } from '../handlers/ContentTypeRegistry';
 import { YouTubeHandler } from '../handlers/YouTubeHandler';
+import { MediumHandler } from '../handlers/MediumHandler';
 
 /**
  * Create an LLM provider based on the current plugin settings
@@ -261,6 +262,14 @@ export function createContentTypeRegistry(): ContentTypeRegistry {
     logger.debugLog("Registered YouTubeHandler");
   } catch (error) {
     logger.error("Failed to register YouTubeHandler", error);
+  }
+  
+  // Register Medium handler
+  try {
+    registry.register(new MediumHandler());
+    logger.debugLog("Registered MediumHandler");
+  } catch (error) {
+    logger.error("Failed to register MediumHandler", error);
   }
   
   // More handlers will be added in future slices
