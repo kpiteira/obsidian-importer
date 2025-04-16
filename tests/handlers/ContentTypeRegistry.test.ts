@@ -1,153 +1,207 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ContentTypeRegistry } from '../../src/handlers/ContentTypeRegistry';
 import { ContentTypeHandler } from '../../src/handlers/ContentTypeHandler';
-import { YouTubeHandler } from '../../src/handlers/YouTubeHandler';
+import { LLMProvider, LLMOptions } from '../../src/services/LLMProvider';
+import { fetchWebPageContent } from '../../src/utils/webFetcher';
 
-// Mock the logger
+// Mock dependencies
+vi.mock('../../src/utils/webFetcher', () => ({
+  fetchWebPageContent: vi.fn(),
+  extractMainContent: vi.fn((html) => html.substring(0, 1000))
+}));
+
 vi.mock('../../src/utils/importerLogger', () => ({
-  getLogger: () => ({
-    debugLog: vi.fn(),
+  getLogger: vi.fn(() => ({
+    info: vi.fn(),
     error: vi.fn(),
-    warn: vi.fn()
-  })
+    warn: vi.fn(),
+    debugLog: vi.fn()
+  }))
 }));
 
 describe('ContentTypeRegistry', () => {
   let registry: ContentTypeRegistry;
-  let youtubeHandler: ContentTypeHandler;
+  let mockLLMProvider: LLMProvider;
+  let mockYouTubeHandler: ContentTypeHandler;
+  let mockMediumHandler: ContentTypeHandler;
+  let mockGenericHandler: ContentTypeHandler;
   
-  // Create a mock handler for testing
-  const createMockHandler = (type: string, detectResult: boolean): ContentTypeHandler => {
-    return {
-      type,
-      detect: vi.fn().mockReturnValue(detectResult),
-      canHandleUrl: vi.fn().mockResolvedValue(detectResult),
+  beforeEach(() => {
+    // Reset mocks
+    vi.clearAllMocks();
+    
+    // Create a mock LLM provider
+    mockLLMProvider = {
+      callLLM: vi.fn().mockResolvedValue('youtube')
+    } as any;
+    
+    // Create a mock YouTube handler
+    mockYouTubeHandler = {
+      type: 'youtube',
+      detect: vi.fn((url) => url.hostname === 'www.youtube.com'),
+      canHandleUrl: vi.fn().mockResolvedValue(false),
       requiresContentDetection: vi.fn().mockReturnValue(false),
+      download: vi.fn().mockResolvedValue({ content: 'video content', metadata: {} }),
       getPrompt: vi.fn(),
       parseLLMResponse: vi.fn(),
-      validateLLMOutput: vi.fn(),
-      download: vi.fn(),
+      validateLLMOutput: vi.fn().mockReturnValue(true),
       getNoteContent: vi.fn(),
-      getFolderName: vi.fn()
+      getFolderName: vi.fn().mockReturnValue('YouTube'),
+      getRequiredApiKeys: vi.fn().mockReturnValue([])
     };
-  };
-
-  beforeEach(() => {
-    registry = new ContentTypeRegistry();
-    youtubeHandler = new YouTubeHandler();
+    
+    // Create a mock Medium handler
+    mockMediumHandler = {
+      type: 'medium',
+      detect: vi.fn((url) => url.hostname === 'medium.com'),
+      canHandleUrl: vi.fn().mockResolvedValue(false),
+      requiresContentDetection: vi.fn().mockReturnValue(false),
+      download: vi.fn().mockResolvedValue({ content: 'article content', metadata: {} }),
+      getPrompt: vi.fn(),
+      parseLLMResponse: vi.fn(),
+      validateLLMOutput: vi.fn().mockReturnValue(true),
+      getNoteContent: vi.fn(),
+      getFolderName: vi.fn().mockReturnValue('Medium'),
+      getRequiredApiKeys: vi.fn().mockReturnValue([])
+    };
+    
+    // Create a mock generic handler
+    mockGenericHandler = {
+      type: 'generic',
+      detect: vi.fn(() => false), // Never detects by URL
+      canHandleUrl: vi.fn().mockResolvedValue(false),
+      requiresContentDetection: vi.fn().mockReturnValue(true), // Always requires content detection
+      download: vi.fn().mockResolvedValue({ content: 'generic content', metadata: {} }),
+      getPrompt: vi.fn(),
+      parseLLMResponse: vi.fn(),
+      validateLLMOutput: vi.fn().mockReturnValue(true),
+      getNoteContent: vi.fn(),
+      getFolderName: vi.fn().mockReturnValue('Web'),
+      getRequiredApiKeys: vi.fn().mockReturnValue([])
+    };
+    
+    // Create the registry with the mock provider
+    registry = new ContentTypeRegistry(mockLLMProvider);
   });
-
-  afterEach(() => {
-    vi.resetAllMocks();
+  
+  it('should register and return handlers correctly', () => {
+    registry.register(mockYouTubeHandler);
+    registry.register(mockMediumHandler);
+    
+    const handlers = registry.getHandlers();
+    
+    expect(handlers).toHaveLength(2);
+    expect(handlers).toContain(mockYouTubeHandler);
+    expect(handlers).toContain(mockMediumHandler);
   });
-
-  describe('registration and retrieval', () => {
-    it('should register a handler', () => {
-      registry.register(youtubeHandler);
-      expect(registry.getHandlers()).toHaveLength(1);
-      expect(registry.getHandlers()[0]).toBe(youtubeHandler);
-    });
-
-    it('should register multiple handlers', () => {
-      const mockHandler1 = createMockHandler('test1', true);
-      const mockHandler2 = createMockHandler('test2', false);
-      
-      registry.register(youtubeHandler);
-      registry.register(mockHandler1);
-      registry.register(mockHandler2);
-      
-      expect(registry.getHandlers()).toHaveLength(3);
-      expect(registry.getHandlers()[0]).toBe(youtubeHandler);
-      expect(registry.getHandlers()[1]).toBe(mockHandler1);
-      expect(registry.getHandlers()[2]).toBe(mockHandler2);
-    });
+  
+  it('should get handler by type', () => {
+    registry.register(mockYouTubeHandler);
+    registry.register(mockMediumHandler);
+    
+    expect(registry.getHandlerByType('youtube')).toBe(mockYouTubeHandler);
+    expect(registry.getHandlerByType('medium')).toBe(mockMediumHandler);
+    expect(registry.getHandlerByType('nonexistent')).toBeUndefined();
   });
-
-  describe('content type detection', () => {
-    it('should detect YouTube URLs', async () => {
-      registry.register(youtubeHandler);
-      const handler = await registry.detectContentType('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
-      expect(handler).toBe(youtubeHandler);
+  
+  it('should detect content type by URL-based detection', async () => {
+    // Set up the handler to detect YouTube URLs
+    mockYouTubeHandler.canHandleUrl = vi.fn().mockImplementation(async (url) => {
+      return url.hostname === 'www.youtube.com';
     });
-
-    it('should return null for unsupported URLs', async () => {
-      registry.register(youtubeHandler);
-      const handler = await registry.detectContentType('https://example.com');
-      expect(handler).toBeNull();
-    });
-
-    it('should detect based on the first matching handler', async () => {
-      const mockHandler1 = createMockHandler('test1', false);
-      const mockHandler2 = createMockHandler('test2', true);
-      const mockHandler3 = createMockHandler('test3', true); // This should never be reached
-      
-      registry.register(mockHandler1);
-      registry.register(mockHandler2);
-      registry.register(mockHandler3);
-      
-      const handler = await registry.detectContentType('https://example.com');
-      
-      expect(mockHandler1.detect).toHaveBeenCalled();
-      expect(mockHandler2.detect).toHaveBeenCalled();
-      expect(mockHandler3.detect).not.toHaveBeenCalled(); // Should short-circuit after finding a match
-      expect(handler).toBe(mockHandler2);
-    });
+    
+    registry.register(mockYouTubeHandler);
+    registry.register(mockMediumHandler);
+    
+    const handler = await registry.detectContentType('https://www.youtube.com/watch?v=123456');
+    
+    expect(handler).toBe(mockYouTubeHandler);
+    expect(mockYouTubeHandler.canHandleUrl).toHaveBeenCalled();
+    expect(fetchWebPageContent).not.toHaveBeenCalled(); // No need to fetch content
   });
-
-  describe('caching behavior', () => {
-    it('should cache detection results', async () => {
-      const mockHandler = createMockHandler('test', true);
-      registry.register(mockHandler);
-      
-      // First call should use detect()
-      await registry.detectContentType('https://example.com');
-      expect(mockHandler.detect).toHaveBeenCalledTimes(1);
-      
-      // Second call should use cache and not call detect()
-      await registry.detectContentType('https://example.com');
-      expect(mockHandler.detect).toHaveBeenCalledTimes(1); // Still only called once
+  
+  it('should use cache for subsequent lookups', async () => {
+    // Set up the handler to detect YouTube URLs
+    mockYouTubeHandler.canHandleUrl = vi.fn().mockImplementation(async (url) => {
+      return url.hostname === 'www.youtube.com';
     });
-
-    it('should clear cache when requested', async () => {
-      const mockHandler = createMockHandler('test', true);
-      registry.register(mockHandler);
-      
-      // First call should use detect()
-      await registry.detectContentType('https://example.com');
-      expect(mockHandler.detect).toHaveBeenCalledTimes(1);
-      
-      // Clear cache
-      registry.clearCache();
-      
-      // Next call should call detect() again
-      await registry.detectContentType('https://example.com');
-      expect(mockHandler.detect).toHaveBeenCalledTimes(2);
+    
+    registry.register(mockYouTubeHandler);
+    
+    // First lookup should call canHandleUrl
+    await registry.detectContentType('https://www.youtube.com/watch?v=123456');
+    
+    // Second lookup should use cache
+    const handler = await registry.detectContentType('https://www.youtube.com/watch?v=123456');
+    
+    expect(handler).toBe(mockYouTubeHandler);
+    expect(mockYouTubeHandler.canHandleUrl).toHaveBeenCalledTimes(1);
+  });
+  
+  it('should fall back to content-based detection when URL detection fails', async () => {
+    // Set up all handlers to fail URL detection
+    mockYouTubeHandler.canHandleUrl = vi.fn().mockResolvedValue(false);
+    mockMediumHandler.canHandleUrl = vi.fn().mockResolvedValue(false);
+    mockGenericHandler.canHandleUrl = vi.fn().mockResolvedValue(false);
+    
+    // Only generic handler requires content detection
+    mockYouTubeHandler.requiresContentDetection = vi.fn().mockReturnValue(false);
+    mockMediumHandler.requiresContentDetection = vi.fn().mockReturnValue(false);
+    mockGenericHandler.requiresContentDetection = vi.fn().mockReturnValue(true);
+    
+    // Set up fetchWebPageContent mock to return some HTML
+    (fetchWebPageContent as any).mockResolvedValue('<html><body>Some website content</body></html>');
+    
+    // LLM provider should return 'generic' for content detection
+    mockLLMProvider.callLLM = vi.fn().mockResolvedValue('generic');
+    
+    registry.register(mockYouTubeHandler);
+    registry.register(mockMediumHandler);
+    registry.register(mockGenericHandler);
+    
+    const handler = await registry.detectContentType('https://example.com/article');
+    
+    expect(handler).toBe(mockGenericHandler);
+    expect(fetchWebPageContent).toHaveBeenCalled();
+    expect(mockLLMProvider.callLLM).toHaveBeenCalled();
+  });
+  
+  it('should throw error if no handler is found', async () => {
+    // Set up all handlers to fail detection
+    mockYouTubeHandler.canHandleUrl = vi.fn().mockResolvedValue(false);
+    mockMediumHandler.canHandleUrl = vi.fn().mockResolvedValue(false);
+    
+    registry.register(mockYouTubeHandler);
+    registry.register(mockMediumHandler);
+    
+    await expect(registry.detectContentType('https://example.com/article'))
+      .rejects.toThrow('Could not determine content type for this URL');
+  });
+  
+  it('should throw error on invalid URL', async () => {
+    registry.register(mockYouTubeHandler);
+    
+    await expect(registry.detectContentType('invalid-url'))
+      .rejects.toThrow('Invalid URL format');
+  });
+  
+  it('should clear cache when requested', async () => {
+    // Set up the handler to detect YouTube URLs
+    mockYouTubeHandler.canHandleUrl = vi.fn().mockImplementation(async (url) => {
+      return url.hostname === 'www.youtube.com';
     });
-
-    it('should report cache size correctly', async () => {
-      const mockHandler = createMockHandler('test', true);
-      registry.register(mockHandler);
-      
-      // Cache should be empty initially
-      expect(registry.getCacheSize()).toBe(0);
-      
-      // Add one item to cache
-      await registry.detectContentType('https://example.com');
-      expect(registry.getCacheSize()).toBe(1);
-      
-      // Add another item to cache
-      await registry.detectContentType('https://example.org');
-      expect(registry.getCacheSize()).toBe(2);
-      
-      // Clear cache
-      registry.clearCache();
-      expect(registry.getCacheSize()).toBe(0);
-    });
-
-    it('should handle invalid URLs gracefully', async () => {
-      registry.register(youtubeHandler);
-      const handler = await registry.detectContentType('not-a-url');
-      expect(handler).toBeNull();
-    });
+    
+    registry.register(mockYouTubeHandler);
+    
+    // First lookup
+    await registry.detectContentType('https://www.youtube.com/watch?v=123456');
+    
+    // Clear cache
+    registry.clearCache();
+    
+    // Second lookup should not use cache
+    await registry.detectContentType('https://www.youtube.com/watch?v=123456');
+    
+    expect(mockYouTubeHandler.canHandleUrl).toHaveBeenCalledTimes(2);
   });
 });

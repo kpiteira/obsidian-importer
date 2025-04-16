@@ -165,22 +165,63 @@ export abstract class BaseOpenAIProvider implements LLMProvider {
 
         const data = response.json ? await response.json : JSON.parse(response.text);
         
-        if (
-          !data ||
-          !data.choices ||
-          !Array.isArray(data.choices) ||
-          !data.choices[0] ||
-          !data.choices[0].message ||
-          typeof data.choices[0].message.content !== "string"
-        ) {
-          this.logger.warn(`Invalid response format from ${this.getName()} API`, {
-            responseStructure: Object.keys(data || {})
+        // Enhanced response parsing logic to handle different API formats
+        let contentText: string | undefined;
+        
+        // Log the response structure to help debug
+        this.logger.debugLog(`Response structure: ${JSON.stringify(Object.keys(data || {}))}`);
+        
+        // Check for OpenAI format
+        if (data.choices && Array.isArray(data.choices) && data.choices.length > 0) {
+          // Standard OpenAI format
+          if (data.choices[0].message && typeof data.choices[0].message.content === "string") {
+            contentText = data.choices[0].message.content;
+          } 
+          // Alternative format where content might be directly in the choice
+          else if (typeof data.choices[0].content === "string") {
+            contentText = data.choices[0].content;
+          }
+          // Handle text field that some APIs use
+          else if (typeof data.choices[0].text === "string") {
+            contentText = data.choices[0].text;
+          }
+        }
+        // Gemini/Requesty format might use "candidates" instead of "choices"
+        else if (data.candidates && Array.isArray(data.candidates) && data.candidates.length > 0) {
+          if (data.candidates[0].content && data.candidates[0].content.parts) {
+            const parts = data.candidates[0].content.parts;
+            if (Array.isArray(parts) && parts.length > 0 && typeof parts[0].text === "string") {
+              contentText = parts[0].text;
+            } else if (Array.isArray(parts) && parts.length > 0 && typeof parts[0] === "string") {
+              contentText = parts[0];
+            }
+          } else if (typeof data.candidates[0].text === "string") {
+            contentText = data.candidates[0].text;
+          }
+        }
+        // Direct content field at top level (some simplified APIs)
+        else if (data.content && typeof data.content === "string") {
+          contentText = data.content;
+        }
+        // Any other text field that might contain the response
+        else if (data.text && typeof data.text === "string") {
+          contentText = data.text;
+        }
+        // Response might be formatted as a raw string
+        else if (typeof data === "string") {
+          contentText = data;
+        }
+        
+        if (!contentText) {
+          // Log the actual response for debugging
+          this.logger.warn(`Unable to extract text from response`, {
+            responseStructure: JSON.stringify(data).substring(0, 500) + "..." // Truncated for log size
           });
-          throw new Error(redactApiKey(`Invalid response format from ${this.getName()} API.`, this.apiKey));
+          throw new Error(redactApiKey(`Invalid response format from ${this.getName()} API: could not find content in response.`, this.apiKey));
         }
         
         this.logger.debugLog(`LLM call completed successfully`);
-        return data.choices[0].message.content;
+        return contentText;
       } catch (err: any) {
         this.logger.error(`LLM API call error: ${err.message || String(err)}`);
         if (err.message && err.message.includes("timed out")) {

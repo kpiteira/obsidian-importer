@@ -90,6 +90,23 @@ export class RequestyProvider extends BaseOpenAIProvider {
     this.logger.debugLog(
       `RequestyProvider.callLLM called with model=${this.modelId}`
     );
+
+    // If using a Gemini model, add specific handling
+    if (this.modelId.includes('gemini')) {
+      try {
+        const response = await super.callLLM(prompt, options);
+        return response;
+      } catch (error: unknown) {
+        // Add extra debug logging for Gemini models
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        this.logger.debugLog(`Enhanced error handling for Gemini model: ${errorMessage}`);
+        
+        // Re-throw the error for consistent error handling up the chain
+        throw error;
+      }
+    }
+
+    // Default handling for other models
     return super.callLLM(prompt, options);
   }
 }

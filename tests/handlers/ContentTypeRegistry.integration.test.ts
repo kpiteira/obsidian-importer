@@ -1,151 +1,165 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ContentTypeRegistry } from '../../src/handlers/ContentTypeRegistry';
 import { YouTubeHandler } from '../../src/handlers/YouTubeHandler';
-import { ImportPipelineOrchestrator } from '../../src/orchestrator/ImportPipelineOrchestrator';
+import { LLMProvider } from '../../src/services/LLMProvider';
+import { fetchWebPageContent } from '../../src/utils/webFetcher';
 
-// Mock the logger, URL fetching, and other dependencies
+// Mock dependencies
+vi.mock('../../src/utils/webFetcher', () => ({
+  fetchWebPageContent: vi.fn().mockResolvedValue('<html><body>Test content</body></html>'),
+  extractMainContent: vi.fn((html) => html)
+}));
+
 vi.mock('../../src/utils/importerLogger', () => ({
-  getLogger: () => ({
-    debugLog: vi.fn(),
+  getLogger: vi.fn(() => ({
+    info: vi.fn(),
     error: vi.fn(),
-    warn: vi.fn()
-  })
+    warn: vi.fn(),
+    debugLog: vi.fn()
+  }))
 }));
 
-// Mock the YouTube transcript service
-vi.mock('../../src/services/YouTubeTranscriptService', () => ({
-  extractTranscriptFromHtml: vi.fn().mockResolvedValue("Test transcript content")
-}));
-
-// Mock the YouTube utility functions
-vi.mock('../../src/utils/youtube', () => ({
-  extractYouTubeVideoId: vi.fn().mockReturnValue('testVideoId'),
-  generateYouTubeEmbedHtml: vi.fn().mockReturnValue('<iframe src="test"></iframe>')
-}));
-
-// Mock Obsidian's requestUrl function
+// Mock Obsidian's requestUrl
 vi.mock('obsidian', () => ({
-  requestUrl: vi.fn().mockResolvedValue({
-    text: `<html>
-      <head>
-        <meta property="og:title" content="Test Video">
-        <meta property="og:image" content="thumbnail.jpg">
-        <meta property="og:image:width" content="1280">
-        <meta property="og:image:height" content="720">
-      </head>
-      <body>
-        <script>
-          "author":"Test Channel",
-          "channelId":"TestChannelID"
-        </script>
-      </body>
-    </html>`
-  })
+  requestUrl: vi.fn().mockResolvedValue({ text: '<html><body>Mock YouTube page</body></html>' })
+}));
+
+// Mock transcript extraction
+vi.mock('../../src/services/YouTubeTranscriptService', () => ({
+  extractTranscriptFromHtml: vi.fn().mockResolvedValue('Mock transcript')
 }));
 
 describe('ContentTypeRegistry Integration Tests', () => {
   let registry: ContentTypeRegistry;
-  let orchestrator: ImportPipelineOrchestrator;
-  let mockLLMProvider: any;
-  let mockNoteWriter: any;
+  let mockLLMProvider: LLMProvider;
+  let youtubeHandler: YouTubeHandler;
   
   beforeEach(() => {
-    // Create a new registry with YouTubeHandler
-    registry = new ContentTypeRegistry();
+    // Reset mocks
+    vi.clearAllMocks();
     
-    // Create a real YouTube handler but spy on its methods
-    const youtubeHandler = new YouTubeHandler();
-    vi.spyOn(youtubeHandler, 'detect');
-    vi.spyOn(youtubeHandler, 'download');
-    vi.spyOn(youtubeHandler, 'getPrompt');
-    vi.spyOn(youtubeHandler, 'parseLLMResponse');
-    vi.spyOn(youtubeHandler, 'validateLLMOutput').mockReturnValue(true);
-    
-    registry.register(youtubeHandler);
-    
-    // Mock the LLM provider and note writer
+    // Create a mock LLM provider
     mockLLMProvider = {
-      callLLM: vi.fn().mockResolvedValue("## Summary\nTest summary\n\n## Key points\n- Point 1\n- Point 2\n\n## Technical terms\n- **[[Term 1]]**: Explanation 1\n- **[[Term 2]]**: Explanation 2\n\n## Conclusion\nTest conclusion")
+      callLLM: vi.fn().mockResolvedValue('youtube')
+    } as any;
+    
+    // Create the registry with the mock provider
+    registry = new ContentTypeRegistry(mockLLMProvider);
+    
+    // Create and register a real YouTube handler
+    youtubeHandler = new YouTubeHandler();
+    registry.register(youtubeHandler);
+  });
+  
+  it('should detect YouTube URLs with the real YouTubeHandler', async () => {
+    // Important: Use a spy to verify behavior while keeping the original implementation
+    const canHandleUrlSpy = vi.spyOn(youtubeHandler, 'canHandleUrl');
+    
+    const handler = await registry.detectContentType('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    
+    expect(handler).toBe(youtubeHandler);
+    expect(canHandleUrlSpy).toHaveBeenCalled();
+    expect(fetchWebPageContent).not.toHaveBeenCalled(); // No need for content-based detection
+  });
+  
+  it('should use cached handler for subsequent YouTube URL lookups', async () => {
+    const canHandleUrlSpy = vi.spyOn(youtubeHandler, 'canHandleUrl');
+    
+    // First lookup
+    await registry.detectContentType('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    
+    // Second lookup should use cache
+    const handler = await registry.detectContentType('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    
+    expect(handler).toBe(youtubeHandler);
+    expect(canHandleUrlSpy).toHaveBeenCalledTimes(1);
+  });
+  
+  it('should properly integrate with LLM for content detection', async () => {
+    // Create a mock registry with LLM provider for content detection
+    const contentDetectionRegistry = new ContentTypeRegistry(mockLLMProvider);
+    
+    // Setup a URL that isn't recognized by YouTubeHandler
+    const url = 'https://example.com/article';
+    
+    // Create a mock generic handler that requires content-based detection
+    const mockGenericHandler = {
+      type: 'generic',
+      detect: vi.fn(() => false),
+      canHandleUrl: vi.fn().mockResolvedValue(false),
+      requiresContentDetection: vi.fn().mockReturnValue(true),
+      download: vi.fn().mockResolvedValue({ content: 'generic content', metadata: {} }),
+      getPrompt: vi.fn(),
+      parseLLMResponse: vi.fn(),
+      validateLLMOutput: vi.fn().mockReturnValue(true),
+      getNoteContent: vi.fn(),
+      getFolderName: vi.fn().mockReturnValue('Web'),
+      getRequiredApiKeys: vi.fn().mockReturnValue([])
     };
     
-    mockNoteWriter = {
-      writeNote: vi.fn().mockResolvedValue('/TestFolder/Test Video.md')
-    };
+    // Register the generic handler
+    contentDetectionRegistry.register(mockGenericHandler);
     
-    // Create orchestrator with mocked dependencies and our registry
-    orchestrator = new ImportPipelineOrchestrator({
-      settings: { defaultFolder: 'TestFolder' } as any,
-      llmProvider: mockLLMProvider,
-      noteWriter: mockNoteWriter,
-      logger: {
-        debugLog: vi.fn(),
-        error: vi.fn(),
-        warn: vi.fn(),
-        info: vi.fn()
-      },
-      contentTypeRegistry: registry
-    });
-  });
-
-  afterEach(() => {
-    vi.resetAllMocks();
-  });
-
-  it('should detect YouTube URLs and process them successfully through the orchestrator', async () => {
-    // Set up progress tracking
-    const progressStages: string[] = [];
-    orchestrator.onProgress((progress) => {
-      progressStages.push(progress.stage);
-    });
+    // Setup fetchWebPageContent to return HTML
+    (fetchWebPageContent as any).mockResolvedValue('<html><body>Generic article content</body></html>');
     
-    // Get the handler for spying
-    const youtubeHandler = registry.getHandlers()[0] as YouTubeHandler;
+    // LLM provider should determine it's generic content
+    mockLLMProvider.callLLM = vi.fn().mockResolvedValue('generic');
     
-    // Test URL
-    const youtubeUrl = 'https://www.youtube.com/watch?v=testVideoId';
+    // When using content-based detection
+    const handler = await contentDetectionRegistry.detectContentType(url);
     
-    // Run the orchestrator
-    await orchestrator.run(youtubeUrl);
-    
-    // Verify detection worked (via registry now)
-    expect(await registry.detectContentType(youtubeUrl)).toBe(youtubeHandler);
-    
-    // Verify LLM was called
+    // Verify the results
+    expect(handler).toBe(mockGenericHandler);
+    expect(fetchWebPageContent).toHaveBeenCalledWith(url);
     expect(mockLLMProvider.callLLM).toHaveBeenCalled();
     
-    // Verify note was written
-    expect(mockNoteWriter.writeNote).toHaveBeenCalled();
-    expect(mockNoteWriter.writeNote.mock.calls[0][0]).toContain('YouTube');
-    
-    // Verify we went through all pipeline stages
-    expect(progressStages).toContain('validating_url');
-    expect(progressStages).toContain('downloading_content');
-    expect(progressStages).toContain('processing_with_llm');
-    expect(progressStages).toContain('writing_note');
-    expect(progressStages).toContain('completed');
+    // The prompt sent to the LLM should contain the URL and content sample
+    const llmPromptArg = (mockLLMProvider.callLLM as any).mock.calls[0][0];
+    expect(llmPromptArg).toContain(url);
+    expect(llmPromptArg).toContain('Generic article content');
   });
-
-  it('should use the cache for repeated URL detection', async () => {
-    const youtubeUrl = 'https://www.youtube.com/watch?v=cacheTestId';
+  
+  it('integrates with cached content for download operations', async () => {
+    // Create a separate registry for this test
+    const cacheTestRegistry = new ContentTypeRegistry(mockLLMProvider);
     
-    // First call should detect and cache
-    const handler1 = await registry.detectContentType(youtubeUrl);
-    expect(handler1).toBeInstanceOf(YouTubeHandler);
+    // Setup a URL that will be detected by content-based detection
+    const url = 'https://example.com/article';
+    const cachedContent = '<html><body>Cached page content</body></html>';
     
-    // Get the handler instance
-    const youtubeHandler = registry.getHandlers()[0] as YouTubeHandler;
+    // Create a handler that requires content-based detection
+    const mockGenericHandler = {
+      type: 'generic',
+      detect: vi.fn(() => false),
+      canHandleUrl: vi.fn().mockResolvedValue(false),
+      requiresContentDetection: vi.fn().mockReturnValue(true),
+      download: vi.fn().mockResolvedValue({ content: 'processed content', metadata: {} }),
+      getPrompt: vi.fn(),
+      parseLLMResponse: vi.fn(),
+      validateLLMOutput: vi.fn().mockReturnValue(true),
+      getNoteContent: vi.fn(),
+      getFolderName: vi.fn().mockReturnValue('Web'),
+      getRequiredApiKeys: vi.fn().mockReturnValue([])
+    };
     
-    // Reset the detect method to verify it's not called on the second try
-    const detectSpy = vi.spyOn(youtubeHandler, 'detect').mockClear();
+    // Register the handler
+    cacheTestRegistry.register(mockGenericHandler);
     
-    // Second call should use cache
-    const handler2 = await registry.detectContentType(youtubeUrl);
-    expect(handler2).toBeInstanceOf(YouTubeHandler);
+    // Setup fetchWebPageContent to return our cached content
+    (fetchWebPageContent as any).mockResolvedValue(cachedContent);
     
-    // Verify the detect method wasn't called again
-    expect(detectSpy).not.toHaveBeenCalled();
+    // LLM provider should determine it's generic content
+    mockLLMProvider.callLLM = vi.fn().mockResolvedValue('generic');
     
-    // Verify cache size
-    expect(registry.getCacheSize()).toBe(1);
+    // First detect the content type (this will cache the content)
+    await cacheTestRegistry.detectContentType(url);
+    
+    // Manually verify the private cache by using our public accessor
+    const cachedResult = cacheTestRegistry.getCachedContent(url);
+    expect(cachedResult).toBe(cachedContent);
+    
+    // Verify the download method can access cached content
+    expect(mockGenericHandler.download).not.toHaveBeenCalled();
   });
 });

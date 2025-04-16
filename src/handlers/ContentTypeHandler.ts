@@ -1,105 +1,104 @@
-/**
- * Interface for content type handlers in the strategy-based handler architecture.
- * Each handler is responsible for detecting, prompting, and parsing content of a specific type.
- */
 import { LLMOutput } from "../services/LLMProvider";
 
+/**
+ * Base metadata interface that all content type handlers should extend
+ */
 export interface ContentMetadata {
-  title: string;
+  title?: string;
+  url?: string;
+  type?: string;
+  // Any other common metadata fields
+  [key: string]: any; // Allow for handler-specific fields
 }
 
+/**
+ * Interface defining a content handler for a specific content type.
+ * Each handler is responsible for:
+ * 1. Detecting if it can handle a given URL
+ * 2. Downloading and extracting content 
+ * 3. Generating a prompt for LLM processing
+ * 4. Parsing the LLM response
+ * 5. Generating the final note content
+ */
 export interface ContentTypeHandler {
   /**
-   * The unique type string for this handler (e.g., "youtube").
-   * Used to identify the handler within the dispatcher and for logging or debugging.
+   * The type identifier for this handler (e.g., "youtube", "medium", "github")
    */
-  type: string;
-
+  readonly type: string;
+  
   /**
-   * Determines if this handler can process the given URL.
-   * Used by the dispatcher to select the appropriate handler for a given input.
-   * @param url The URL to check.
-   * @returns True if this handler can process the URL, false otherwise.
+   * Legacy URL detection method (synchronous)
+   * @deprecated Use canHandleUrl instead
    */
   detect(url: URL): boolean;
   
   /**
-   * Enhanced URL-based detection for ContentTypeRegistry.
-   * By default, uses the detect(url) method.
-   * @param url The URL to check
-   * @returns Promise resolving to true if this handler can process the URL
+   * Enhanced URL-based detection that can perform async checks
+   * Called by ContentTypeRegistry in the first phase of detection
    */
-  canHandleUrl?(url: URL): Promise<boolean>;
+  canHandleUrl(url: URL): Promise<boolean>;
   
   /**
-   * Determines if this handler requires content-based detection.
-   * Used by the registry to decide which detection strategy to use.
-   * @returns True if content-based detection is required, false if URL-based detection is sufficient
+   * Indicates if this handler requires content-based detection
+   * Returns true if the handler can't reliably detect content by URL alone
    */
-  requiresContentDetection?(): boolean;
-
+  requiresContentDetection(): boolean;
+  
   /**
-   * Generates the LLM prompt for this content type, based on provided metadata.
-   * This method encapsulates the prompt engineering logic specific to the content type.
-   * @param metadata Arbitrary metadata required to construct the prompt (e.g., video title, transcript).
-   * @returns The prompt string to send to the LLM.
+   * Lists API keys required by this handler
+   * Used to validate required keys before attempting to process content
    */
-  getPrompt(metadata: ContentMetadata): string;
-
+  getRequiredApiKeys(): string[];
+  
   /**
-   * Parses the LLM's markdown response into a structured output for this content type.
-   * This method encapsulates the parsing logic specific to the content type's expected output.
-   * @param markdown The markdown string returned by the LLM.
-   * @returns The parsed output as an LLMOutput object.
+   * Downloads and processes content from a URL.
+   * Returns a unified content object with both content and metadata.
+   * 
+   * @param url The URL to fetch content from
+   * @param cachedContent Optional pre-fetched content if available
+   * @returns Promise resolving to a unified content object with content and metadata
+   */
+  download(url: string, cachedContent?: string): Promise<{
+    /**
+     * The handler-specific content object, which may include both the primary content
+     * and any metadata. All handlers should return a consistent structure for their type.
+     */
+    unifiedContent: ContentMetadata
+  }>;
+  
+  /**
+   * Generates the LLM prompt for this content type
+   * @param unifiedContent The unified content object returned by download()
+   * @returns The prompt string to send to the LLM
+   */
+  getPrompt(unifiedContent: ContentMetadata): string;
+  
+  /**
+   * Parses the LLM markdown response into a structured object
+   * @param markdown The raw markdown response from the LLM
+   * @returns The parsed structured output
    */
   parseLLMResponse(markdown: string): LLMOutput;
-
+  
   /**
-   * Validates the LLM output for this content type.
-   * Throws an error if the output is invalid.
-   * @param output The LLM output object to validate.
+   * Validates the LLM output to ensure it meets expected format and content requirements
+   * @param output The LLM output to validate
+   * @returns true if valid, throws error if invalid
    */
-  validateLLMOutput(output: LLMOutput): true;
+  validateLLMOutput(output: LLMOutput): boolean;
+  
   /**
-   * Downloads the content and metadata for the given URL.
-   * @param url The URL to download content from.
-   * @returns An object containing the content and metadata.
+   * Gets the folder name for this content type
+   * @param unifiedContent The unified content object
+   * @returns The folder name to use when saving notes
    */
-  download(url: string): Promise<{ content: any; metadata: ContentMetadata }>;
-
+  getFolderName(unifiedContent?: ContentMetadata): string;
+  
   /**
-   * 
-   * @param markdown The markdown string returned by the LLM.
-   * @param metadata The metadata generated during the download process.
-   * @returns The note content to be written to the file.
+   * Generates the final note content to be written to the file
+   * @param markdown The processed markdown content from the LLM
+   * @param unifiedContent The unified content object
+   * @returns The complete note content
    */
-  getNoteContent(markdown: string, metadata: ContentMetadata): string;
-
-  /**
-   * Returns the folder name for YouTube notes.
-   */
-  getFolderName(): string
+  getNoteContent(markdown: string, unifiedContent: ContentMetadata): string;
 }
-
-/**
- * Example: Implementation of ContentTypeHandler for YouTube videos.
- *
- * class YouTubeHandler implements ContentTypeHandler {
- *   type = "youtube";
- *
- *   detect(url: URL): boolean {
- *     // Checks if the URL is a YouTube video link.
- *     return url.hostname.includes("youtube.com") || url.hostname.includes("youtu.be");
- *   }
- *
- *   getPrompt(metadata: any): string {
- *     // Constructs a prompt using video metadata (e.g., title, transcript).
- *     return `Summarize the following YouTube video:\nTitle: ${metadata.title}\nTranscript: ${metadata.transcript}`;
- *   }
- *
- *   parseLLMResponse(markdown: string): LLMOutput {
- *     // Parses the markdown response from the LLM into a structured summary object.
- *     return { summary: markdown.trim() };
- *   }
- * }
- */
