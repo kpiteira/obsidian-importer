@@ -23,6 +23,7 @@ export interface LLMOptions {
   temperature?: number;
   maxTokens?: number;
   timeoutMs?: number;
+  headers?: Record<string, string>; // Additional headers for the API request
 }
 
 /**

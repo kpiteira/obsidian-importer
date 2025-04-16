@@ -18,15 +18,16 @@ describe('RequestyProvider', () => {
   
   it('should have correct name and default endpoint', () => {
     expect(provider.getName()).toBe('Requesty');
-    expect(provider.getDefaultEndpoint()).toBe('https://api.requesty.ai/v1/chat/completions');
+    expect(provider.getDefaultEndpoint()).toBe('https://router.requesty.ai/v1/chat/completions');
   });
   
   it('should get available models', async () => {
     const models = await provider.getAvailableModels();
-    expect(models).toHaveLength(3);
-    expect(models[0].id).toBe('gpt-4-turbo');
-    expect(models[1].id).toBe('gpt-4');
-    expect(models[2].id).toBe('gpt-3.5-turbo');
+    expect(models).toHaveLength(4);
+    expect(models[0].id).toBe('google/gemini-2.0-flash-exp');
+    expect(models[1].id).toBe('gpt-4-turbo');
+    expect(models[2].id).toBe('gpt-4');
+    expect(models[3].id).toBe('gpt-3.5-turbo');
   });
   
   it('should require API key', () => {
@@ -60,12 +61,12 @@ describe('RequestyProvider', () => {
     expect(requestUrl).toHaveBeenCalledTimes(1);
     
     const call = (requestUrl as any).mock.calls[0][0];
-    expect(call.url).toBe('https://api.requesty.ai/v1/chat/completions');
+    expect(call.url).toBe('https://router.requesty.ai/v1/chat/completions');
     expect(call.method).toBe('POST');
     expect(call.headers['Authorization']).toBe(`Bearer ${mockApiKey}`);
     
     const body = JSON.parse(call.body);
-    expect(body.model).toBe('gpt-4-turbo');
+    expect(body.model).toBe('google/gemini-2.0-flash-exp');
     expect(body.messages).toHaveLength(2);
     expect(body.messages[0].role).toBe('system');
     expect(body.messages[1].role).toBe('user');

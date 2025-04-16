@@ -40,7 +40,7 @@ Please provide:
 2. Unit tests that verify the core functionality
 3. Any integration code needed to connect this with existing components
 4. Instructions for manually testing this slice in Obsidian
-5. Ensure the tests pass, but only those that were written in this task
+5. Ensure the build and tests pass, but only those that were written in this task
 
 When complete, I should be able to [describe the expected testable outcome based on the slice goal].
 ---

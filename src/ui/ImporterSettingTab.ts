@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, Notice } from 'obsidian';
 import { PluginSettings, PartialProviderSettings } from '../utils/settings';
 import { isValidUrl } from '../utils/url';
 import { getLogger } from '../utils/importerLogger';
@@ -9,7 +9,8 @@ export class ImporterSettingTab extends PluginSettingTab {
   plugin: Plugin & { 
     settings: PluginSettings; 
     saveSettings: () => Promise<void>;
-    providerRegistry: LLMProviderRegistry; 
+    providerRegistry: LLMProviderRegistry;
+    refreshProviders: () => void; // Add this method reference
   };
   private providerSettingsContainer!: HTMLElement; // Using definite assignment assertion
 
@@ -19,6 +20,7 @@ export class ImporterSettingTab extends PluginSettingTab {
       settings: PluginSettings; 
       saveSettings: () => Promise<void>;
       providerRegistry: LLMProviderRegistry;
+      refreshProviders: () => void; // Add this method reference
     }
   ) {
     super(app, plugin);
@@ -57,6 +59,7 @@ export class ImporterSettingTab extends PluginSettingTab {
           }
           
           await this.plugin.saveSettings();
+          this.plugin.refreshProviders(); // Refresh provider instance
           this.renderProviderSpecificSettings();
         });
       });
@@ -137,7 +140,13 @@ export class ImporterSettingTab extends PluginSettingTab {
    * Render API key setting for the provider
    */
   private renderApiKeySetting(providerType: string, provider: LLMProvider | null): void {
-    const requiresApiKey = provider?.requiresApiKey() !== false; // Default to true if provider is null
+    // Check if this is the LOCAL provider type - never show API key for Local provider
+    if (providerType === ProviderType.LOCAL) {
+      return; // Don't render API key for Local provider
+    }
+    
+    // For other providers, only show API key field if provider explicitly requires it or if provider is null
+    const requiresApiKey = provider ? provider.requiresApiKey() : true;
     
     if (requiresApiKey) {
       const currentSettings = (this.plugin.settings.providerSettings[providerType as ProviderType] || {}) as PartialProviderSettings;
@@ -155,33 +164,29 @@ export class ImporterSettingTab extends PluginSettingTab {
             if (!this.plugin.settings.providerSettings[providerType as ProviderType]) {
               this.plugin.settings.providerSettings[providerType as ProviderType] = {
                 apiKey: value,
-                endpoint: currentSettings.endpoint || '',
-                model: currentSettings.model || '',
+                endpoint: '',
+                model: '',
               };
             } else {
               this.plugin.settings.providerSettings[providerType as ProviderType]!.apiKey = value;
             }
             
-            // Update legacy setting for backward compatibility
-            if (providerType === this.plugin.settings.selectedProvider) {
-              this.plugin.settings.apiKey = value;
-            }
+            // Also update legacy setting for backward compatibility
+            this.plugin.settings.apiKey = value;
             
             await this.plugin.saveSettings();
+            
+            // Refresh provider to pick up new API key
+            if (providerType === this.plugin.settings.selectedProvider) {
+              this.plugin.refreshProviders();
+            }
           });
         });
       
-      // Show validation indicator for empty API key
-      if (!currentSettings.apiKey?.trim()) {
-        const input = apiKeySetting.controlEl.querySelector('input');
-        if (input) {
-          input.classList.add('importer-error');
-          const errorEl = document.createElement('div');
-          errorEl.className = 'importer-error-message';
-          errorEl.style.color = 'red';
-          errorEl.textContent = 'API key cannot be empty.';
-          input.parentElement?.appendChild(errorEl);
-        }
+      // Show validation message if applicable
+      if (currentSettings && 'apiKeyError' in currentSettings) {
+        apiKeySetting.setDesc(`Error: ${(currentSettings as any).apiKeyError}`);
+        apiKeySetting.descEl.addClass('settings-error');
       }
     }
   }
@@ -229,6 +234,11 @@ export class ImporterSettingTab extends PluginSettingTab {
                 }
                 
                 await this.plugin.saveSettings();
+                
+                // Refresh provider to pick up new endpoint
+                if (providerType === this.plugin.settings.selectedProvider) {
+                  this.plugin.refreshProviders();
+                }
               }
               
               // Show/hide error message
@@ -289,6 +299,11 @@ export class ImporterSettingTab extends PluginSettingTab {
             }
             
             await this.plugin.saveSettings();
+            
+            // Refresh provider to pick up new model
+            if (providerType === this.plugin.settings.selectedProvider) {
+              this.plugin.refreshProviders();
+            }
           });
       });
     
@@ -345,6 +360,11 @@ export class ImporterSettingTab extends PluginSettingTab {
                   }
                   
                   await this.plugin.saveSettings();
+                  
+                  // Refresh provider to pick up new model selection
+                  if (providerType === this.plugin.settings.selectedProvider) {
+                    this.plugin.refreshProviders();
+                  }
                 }
               });
             });
@@ -375,16 +395,43 @@ export class ImporterSettingTab extends PluginSettingTab {
             statusDiv.style.marginTop = '10px';
             statusDiv.style.fontWeight = 'bold';
             
-            if (!provider) {
-              statusDiv.style.color = 'red';
-              statusDiv.textContent = `Provider ${providerType} not found in registry.`;
-              return;
-            }
-            
-            statusDiv.textContent = 'Testing connection...';
-            
             try {
-              const isValid = await provider.validateConnection();
+              // Try to get the provider from registry if not provided
+              let testProvider = provider;
+              
+              if (!testProvider) {
+                try {
+                  // Log the registry state for debugging
+                  const registry = this.plugin.providerRegistry;
+                  const availableProviders = registry.getProviderNames();
+                  getLogger().debugLog("Available providers in registry", availableProviders);
+                  
+                  // Re-create provider registry to ensure it's fresh
+                  if (availableProviders.length === 0) {
+                    const { createProviderRegistry } = await import('../orchestrator/orchestratorFactory');
+                    this.plugin.providerRegistry = createProviderRegistry(this.plugin.settings);
+                  }
+                  
+                  // Try to get provider from registry, converting to lowercase if needed
+                  testProvider = this.plugin.providerRegistry.getProvider(providerType);
+                  getLogger().debugLog(`Successfully retrieved provider ${providerType} from registry`);
+                } catch (registryError) {
+                  // If we can't get the provider from registry, try to create it directly
+                  const { createLLMProvider } = await import('../orchestrator/orchestratorFactory');
+                  getLogger().debugLog(`Creating provider ${providerType} directly`);
+                  testProvider = createLLMProvider(this.plugin.settings);
+                }
+              }
+              
+              if (!testProvider) {
+                statusDiv.style.color = 'red';
+                statusDiv.textContent = `Provider ${providerType} not found in registry.`;
+                return;
+              }
+              
+              statusDiv.textContent = 'Testing connection...';
+              
+              const isValid = await testProvider.validateConnection();
               
               if (isValid) {
                 statusDiv.style.color = 'green';

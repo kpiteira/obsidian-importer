@@ -43,15 +43,15 @@ Instead of breaking down tasks by component, we'll organize work into **incremen
   - Test that provider selection persists across plugin reloads
 
 ### Slice 1.3: Implement Additional Providers
-- [ ] **Implementation**:
+- [x] **Implementation**:
   - Create `OpenAIProvider` implementation
   - Create `RequestyProvider` implementation
   - Create `OpenRouterProvider` implementation
   - Create `OllamaProvider` implementation
-- [ ] **Integration**:
+- [x] **Integration**:
   - Register all providers in the plugin main entry point
   - Add model listing functionality to settings UI
-- [ ] **Testing**:
+- [x] **Testing**:
   - Test each provider with a simple API call (using mocks if needed)
   - Verify provider switching works correctly with YouTube imports
 

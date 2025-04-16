@@ -123,14 +123,20 @@ export abstract class BaseOpenAIProvider implements LLMProvider {
 
     const doApiCall = async (): Promise<string> => {
       try {
-        this.logger.debugLog(`Making API call to ${endpoint} with model ${model}`);
+        // Ensure the endpoint correctly includes /chat/completions
+        const apiEndpoint = endpoint.endsWith('/chat/completions') 
+          ? endpoint 
+          : `${endpoint}/chat/completions`;
+          
+        this.logger.debugLog(`Making API call to ${apiEndpoint} with model ${model}`);
         
         const responsePromise = requestUrl({
-          url: endpoint,
+          url: apiEndpoint,
           method: "POST",
           headers: {
             "Authorization": `Bearer ${this.apiKey}`,
             "Content-Type": "application/json",
+            ...(options?.headers || {}) // Include any additional headers from options
           },
           body: JSON.stringify(body),
           contentType: "application/json",

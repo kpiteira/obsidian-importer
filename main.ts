@@ -23,18 +23,27 @@ export default class MyPlugin extends Plugin {
       providers: this.providerRegistry.getProviderNames() 
     });
 
-    // Instantiate orchestrator using the factory with high-level dependencies only
-    const orchestrator = await createImportPipelineOrchestrator(this.app, this.settings, logger);
+    // Instantiate orchestrator using the factory with the provider registry
+    const orchestrator = await createImportPipelineOrchestrator(
+      this.app, 
+      this.settings, 
+      logger,
+      this.providerRegistry // Pass the provider registry to the orchestrator
+    );
 
     this.addCommand({
       id: 'open-url-input-modal',
       name: 'Import from URL...',
       callback: () => {
-        // Open the modal and delegate import to orchestrator.run()
-        new UrlInputModal(this.app, this.settings, logger).open();
+        // Open the modal and pass the provider registry
+        new UrlInputModal(
+          this.app, 
+          this.settings, 
+          logger, 
+          this.providerRegistry // Pass the provider registry to the modal
+        ).open();
       }
     });
-    // Optionally, add other commands that delegate to orchestrator as needed.
 
     this.addSettingTab(new ImporterSettingTab(this.app, this));
   }
@@ -54,5 +63,25 @@ export default class MyPlugin extends Plugin {
 
   async saveSettings() {
     await savePluginSettings(this, this.settings);
+  }
+
+  /**
+   * Refresh providers to pick up setting changes
+   * This should be called whenever a setting that affects providers changes
+   */
+  refreshProviders() {
+    const logger = getLogger();
+    logger.debugLog("Refreshing provider registry due to settings change");
+    
+    // Clear and recreate the provider registry with current settings
+    if (this.providerRegistry) {
+      this.providerRegistry.clear();
+      this.providerRegistry = createProviderRegistry(this.settings);
+      
+      logger.debugLog("Provider registry refreshed", { 
+        providers: this.providerRegistry.getProviderNames(),
+        selectedProvider: this.settings.selectedProvider
+      });
+    }
   }
 }

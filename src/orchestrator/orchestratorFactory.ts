@@ -6,6 +6,9 @@ import { NoteWriter } from '../utils/noteWriter';
 import { LLMProvider, ProviderType } from '../services/LLMProvider';
 import { LLMProviderRegistry } from '../services/LLMProviderRegistry';
 import { RequestyProvider } from '../services/RequestyProvider';
+import { OpenAIProvider } from '../services/OpenAIProvider';
+import { OpenRouterProvider } from '../services/OpenRouterProvider';
+import { OllamaProvider } from '../services/OllamaProvider';
 import { maskApiKey } from '../utils/apiKeyUtils';
 
 /**
@@ -15,7 +18,10 @@ import { maskApiKey } from '../utils/apiKeyUtils';
  */
 export function createLLMProvider(settings: PluginSettings): LLMProvider {
   const logger = getLogger();
-  const selectedProvider = settings.selectedProvider;
+  // Handle possible undefined or empty provider
+  const selectedProvider = settings.selectedProvider || ProviderType.REQUESTY;
+  
+  logger.debugLog(`Creating LLM provider: ${selectedProvider}`);
   
   // Get provider-specific settings or fall back to legacy settings
   const providerSettings = settings.providerSettings[selectedProvider] || {
@@ -24,37 +30,73 @@ export function createLLMProvider(settings: PluginSettings): LLMProvider {
     model: settings.model
   };
   
-  logger.debugLog("Creating LLM provider", {
+  logger.debugLog("Provider settings", {
     providerType: selectedProvider,
     endpoint: providerSettings.endpoint,
     model: providerSettings.model,
-    apiKey: maskApiKey(providerSettings.apiKey)
+    apiKey: providerSettings.apiKey ? "****" : "not set"
   });
   
   // Create the appropriate provider based on the selected type
-  switch(selectedProvider) {
-    case ProviderType.REQUESTY:
-      return new RequestyProvider(
-        providerSettings.apiKey,
-        {
-          endpoint: providerSettings.endpoint,
-          modelId: providerSettings.model,
-          timeoutMs: providerSettings.timeoutMs || 60000
-        }
-      );
-      
-    // Additional provider types will be added in future slices
-    // For now, default to Requesty for other types
-    default:
-      logger.warn(`Provider type ${selectedProvider} not fully implemented yet, using Requesty`);
-      return new RequestyProvider(
-        providerSettings.apiKey,
-        {
-          endpoint: providerSettings.endpoint,
-          modelId: providerSettings.model,
-          timeoutMs: providerSettings.timeoutMs || 60000
-        }
-      );
+  try {
+    switch(selectedProvider) {
+      case ProviderType.REQUESTY:
+        return new RequestyProvider(
+          providerSettings.apiKey || "",
+          {
+            endpoint: providerSettings.endpoint,
+            modelId: providerSettings.model,
+            timeoutMs: providerSettings.timeoutMs || 60000
+          }
+        );
+        
+      case ProviderType.OPENAI:
+        return new OpenAIProvider(
+          providerSettings.apiKey || "",
+          {
+            endpoint: providerSettings.endpoint,
+            modelId: providerSettings.model,
+            timeoutMs: providerSettings.timeoutMs || 60000
+          }
+        );
+        
+      case ProviderType.OPENROUTER:
+        return new OpenRouterProvider(
+          providerSettings.apiKey || "",
+          {
+            endpoint: providerSettings.endpoint,
+            modelId: providerSettings.model,
+            timeoutMs: providerSettings.timeoutMs || 60000
+          }
+        );
+        
+      case ProviderType.LOCAL:
+        return new OllamaProvider(
+          {
+            endpoint: providerSettings.endpoint || "http://localhost:11434",
+            modelId: providerSettings.model,
+            timeoutMs: providerSettings.timeoutMs || 60000
+          }
+        );
+        
+      // Fall back to RequestyProvider if selected provider is not recognized
+      default:
+        logger.warn(`Provider type ${selectedProvider} not recognized, using Requesty as fallback`);
+        return new RequestyProvider(
+          providerSettings.apiKey || "",
+          {
+            endpoint: providerSettings.endpoint,
+            modelId: providerSettings.model,
+            timeoutMs: providerSettings.timeoutMs || 60000
+          }
+        );
+    }
+  } catch (error) {
+    logger.error(`Error creating provider ${selectedProvider}:`, error);
+    // Fall back to a basic Requesty provider if there's an error
+    return new RequestyProvider("", { 
+      modelId: "gpt-3.5-turbo"
+    });
   }
 }
 
@@ -67,46 +109,91 @@ export function createProviderRegistry(settings: PluginSettings): LLMProviderReg
   const logger = getLogger();
   const registry = new LLMProviderRegistry();
   
-  // Register all supported providers
-  Object.values(ProviderType).forEach(providerType => {
-    try {
-      // Get provider-specific settings
-      const providerSettings = settings.providerSettings[providerType] || {
-        apiKey: settings.apiKey,
-        endpoint: settings.llmEndpoint,
-        model: settings.model
-      };
-      
-      // Check for required settings before attempting registration
-      switch(providerType) {
-        case ProviderType.REQUESTY: 
-          if (!providerSettings.apiKey) {
-            logger.error(`Failed to register provider ${providerType}: Missing API key`);
-            return; // Skip registration for this provider
-          }
-          registry.register(new RequestyProvider(
-            providerSettings.apiKey,
-            {
-              endpoint: providerSettings.endpoint,
-              modelId: providerSettings.model,
-              timeoutMs: providerSettings.timeoutMs || 60000
-            }
-          ));
-          break;
-          
-        // Additional provider types will be added in future slices
-        // For now, we only register Requesty
-        // Other providers will be registered when they're implemented
-      }
-    } catch (error) {
-      logger.error(`Failed to register provider ${providerType}`, error);
-      // Don't rethrow - just log and continue with other providers
-    }
-  });
+  logger.debugLog("Creating provider registry");
   
-  logger.debugLog("Registered providers in registry", { 
-    count: registry.getProviderNames().length,
-    providers: registry.getProviderNames()
+  // Always register a Requesty provider as fallback
+  try {
+    // Get provider-specific settings or fall back to legacy settings
+    const requestySettings = settings.providerSettings[ProviderType.REQUESTY] || {
+      apiKey: settings.apiKey,
+      endpoint: settings.llmEndpoint,
+      model: settings.model
+    };
+    
+    registry.register(new RequestyProvider(
+      requestySettings.apiKey || "",
+      {
+        endpoint: requestySettings.endpoint,
+        modelId: requestySettings.model,
+        timeoutMs: requestySettings.timeoutMs || 60000
+      }
+    ));
+    logger.debugLog("Registered RequestyProvider");
+  } catch (error) {
+    logger.error("Failed to register RequestyProvider", error);
+  }
+  
+  // Try to register OpenAI provider 
+  try {
+    // Use type assertion to help TypeScript recognize the properties
+    const openaiSettings = settings.providerSettings[ProviderType.OPENAI] || {} as ProviderSettings;
+    
+    if (openaiSettings.apiKey) {
+      registry.register(new OpenAIProvider(
+        openaiSettings.apiKey,
+        {
+          endpoint: openaiSettings.endpoint,
+          modelId: openaiSettings.model,
+          timeoutMs: openaiSettings.timeoutMs || 60000
+        }
+      ));
+      logger.debugLog("Registered OpenAIProvider");
+    }
+  } catch (error) {
+    logger.error("Failed to register OpenAIProvider", error);
+  }
+  
+  // Try to register OpenRouter provider
+  try {
+    // Use type assertion to help TypeScript recognize the properties
+    const openRouterSettings = settings.providerSettings[ProviderType.OPENROUTER] || {} as ProviderSettings;
+    
+    if (openRouterSettings.apiKey) {
+      registry.register(new OpenRouterProvider(
+        openRouterSettings.apiKey,
+        {
+          endpoint: openRouterSettings.endpoint,
+          modelId: openRouterSettings.model,
+          timeoutMs: openRouterSettings.timeoutMs || 60000
+        }
+      ));
+      logger.debugLog("Registered OpenRouterProvider");
+    }
+  } catch (error) {
+    logger.error("Failed to register OpenRouterProvider", error);
+  }
+  
+  // Try to register Ollama provider (no API key required)
+  try {
+    // Use type assertion to help TypeScript recognize the properties
+    const ollamaSettings = settings.providerSettings[ProviderType.LOCAL] || {} as ProviderSettings;
+    
+    registry.register(new OllamaProvider(
+      {
+        endpoint: ollamaSettings.endpoint || "http://localhost:11434",
+        modelId: ollamaSettings.model || "llama2",
+        timeoutMs: ollamaSettings.timeoutMs || 60000
+      }
+    ));
+    logger.debugLog("Registered OllamaProvider");
+  } catch (error) {
+    logger.error("Failed to register OllamaProvider", error);
+  }
+  
+  const registeredProviders = registry.getProviderNames();
+  logger.debugLog("Providers registered in registry", { 
+    count: registeredProviders.length,
+    providers: registeredProviders
   });
   
   return registry;
@@ -117,15 +204,29 @@ export function createProviderRegistry(settings: PluginSettings): LLMProviderReg
  * @param app Obsidian App instance
  * @param settings Plugin settings
  * @param logger Logger instance
+ * @param providerRegistry Optional provider registry
  * @returns Configured ImportPipelineOrchestrator
  */
 export async function createImportPipelineOrchestrator(
   app: App,
   settings: PluginSettings,
-  logger: ReturnType<typeof getLogger>
+  logger: ReturnType<typeof getLogger>,
+  providerRegistry?: LLMProviderRegistry
 ) {
-  // Create LLM provider based on settings
-  const llmProvider = createLLMProvider(settings);
+  let llmProvider: LLMProvider;
+  
+  // Use the registry if provided, otherwise create a provider directly
+  if (providerRegistry) {
+    try {
+      llmProvider = providerRegistry.getProvider(settings.selectedProvider);
+      logger.debugLog(`Using provider ${settings.selectedProvider} from registry`);
+    } catch (error) {
+      logger.warn(`Could not get provider ${settings.selectedProvider} from registry, creating directly`, error);
+      llmProvider = createLLMProvider(settings);
+    }
+  } else {
+    llmProvider = createLLMProvider(settings);
+  }
   
   // Create note writer
   const noteWriter = new NoteWriter(app);

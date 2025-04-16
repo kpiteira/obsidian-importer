@@ -1,6 +1,7 @@
 import { Modal, App, Notice } from 'obsidian';
 import { isValidExternalUrl } from '../utils/url';
 import { ImportPipelineOrchestrator, ImportPipelineDependencies, ImportPipelineProgress, ImportPipelineError } from '../orchestrator/ImportPipelineOrchestrator';
+import { LLMProviderRegistry } from '../services/LLMProviderRegistry';
 
 /**
  * UrlInputModal
@@ -13,14 +14,16 @@ export class UrlInputModal extends Modal {
   private inputEl: HTMLInputElement | null = null;
   private settings: any;
   private logger: any;
+  private providerRegistry: LLMProviderRegistry | null = null; // Added provider registry
   private progressUnsub: (() => void) | null = null;
   private errorUnsub: (() => void) | null = null;
   private pipelineActive: boolean = false;
 
-  constructor(app: App, settings: any, logger: any) {
+  constructor(app: App, settings: any, logger: any, providerRegistry?: LLMProviderRegistry) {
     super(app);
     this.settings = settings;
     this.logger = logger;
+    this.providerRegistry = providerRegistry || null;
   }
 
   onOpen() {
@@ -89,7 +92,13 @@ export class UrlInputModal extends Modal {
         (async () => {
           try {
             const { createImportPipelineOrchestrator } = await import('../orchestrator/orchestratorFactory');
-            const orchestrator = await createImportPipelineOrchestrator(this.app, this.settings, this.logger);
+            // Pass the provider registry to the orchestrator factory
+            const orchestrator = await createImportPipelineOrchestrator(
+              this.app, 
+              this.settings, 
+              this.logger, 
+              this.providerRegistry || undefined
+            );
 
             orchestrator.onProgress((progress) => {
               ribbonEl.style.display = '';

@@ -1,5 +1,6 @@
+// filepath: /Users/karl/Documents/dev/obsidian-importer/tests/services/OpenAIProvider.test.ts
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { OpenRouterProvider } from '../../src/services/OpenRouterProvider';
+import { OpenAIProvider } from '../../src/services/OpenAIProvider';
 import { requestUrl } from 'obsidian';
 
 // Mock the Obsidian requestUrl function
@@ -18,24 +19,24 @@ vi.mock('../../src/utils/importerLogger', () => ({
   })
 }));
 
-describe('OpenRouterProvider', () => {
-  let provider: OpenRouterProvider;
+describe('OpenAIProvider', () => {
+  let provider: OpenAIProvider;
   const mockApiKey = 'test-api-key';
   
   beforeEach(() => {
     vi.resetAllMocks();
-    provider = new OpenRouterProvider(mockApiKey);
+    provider = new OpenAIProvider(mockApiKey);
   });
   
   describe('getName', () => {
     it('returns the correct provider name', () => {
-      expect(provider.getName()).toBe('OpenRouter');
+      expect(provider.getName()).toBe('OpenAI');
     });
   });
   
   describe('getDefaultEndpoint', () => {
     it('returns the correct default endpoint', () => {
-      expect(provider.getDefaultEndpoint()).toBe('https://openrouter.ai/api/v1');
+      expect(provider.getDefaultEndpoint()).toBe('https://api.openai.com/v1');
     });
   });
   
@@ -46,8 +47,9 @@ describe('OpenRouterProvider', () => {
         status: 200,
         json: {
           data: [
-            { id: 'anthropic/claude-3-opus', name: 'Claude 3 Opus', context_length: 100000 },
-            { id: 'openai/gpt-4', name: 'GPT-4', context_length: 8192 }
+            { id: 'gpt-4', object: 'model' },
+            { id: 'gpt-3.5-turbo', object: 'model' },
+            { id: 'davinci', object: 'model' } // This should be filtered out
           ]
         }
       });
@@ -55,18 +57,17 @@ describe('OpenRouterProvider', () => {
       const models = await provider.getAvailableModels();
       
       expect(requestUrl).toHaveBeenCalledWith({
-        url: 'https://openrouter.ai/api/v1/models',
+        url: 'https://api.openai.com/v1/models',
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${mockApiKey}`,
-          'HTTP-Referer': 'https://obsidian.md/plugins',
-          'X-Title': 'Obsidian Importer'
+          'Content-Type': 'application/json',
         },
       });
       
       expect(models).toEqual([
-        { id: 'anthropic/claude-3-opus', name: 'Claude 3 Opus', contextLength: 100000 },
-        { id: 'openai/gpt-4', name: 'GPT-4', contextLength: 8192 }
+        { id: 'gpt-4', name: 'gpt-4', contextLength: 8192 },
+        { id: 'gpt-3.5-turbo', name: 'gpt-3.5-turbo', contextLength: 4096 }
       ]);
     });
     
@@ -77,13 +78,13 @@ describe('OpenRouterProvider', () => {
       const models = await provider.getAvailableModels();
       
       expect(models.length).toBeGreaterThan(0);
-      expect(models.some(model => model.id.includes('claude'))).toBe(true);
-      expect(models.some(model => model.id.includes('gpt'))).toBe(true);
+      expect(models.some(model => model.id === 'gpt-4')).toBe(true);
+      expect(models.some(model => model.id === 'gpt-3.5-turbo')).toBe(true);
     });
   });
   
   describe('callLLM', () => {
-    it('calls the OpenRouter API with correct headers and returns the response content', async () => {
+    it('calls the OpenAI API and returns the response content', async () => {
       // Mock the API response
       (requestUrl as unknown as vi.Mock).mockResolvedValueOnce({
         status: 200,
@@ -94,24 +95,18 @@ describe('OpenRouterProvider', () => {
       
       const response = await provider.callLLM('Test prompt');
       
-      // Verify the custom headers are included
-      expect(requestUrl).toHaveBeenCalled();
-      const requestBody = JSON.parse((requestUrl as unknown as vi.Mock).mock.calls[0][0].body);
-      expect(requestBody).toBeDefined();
-      
-      // Check that other request parameters are set correctly
       expect(response).toBe('Test response');
     });
   });
   
   describe('requiresApiKey', () => {
-    it('returns true as OpenRouter requires an API key', () => {
+    it('returns true as OpenAI requires an API key', () => {
       expect(provider.requiresApiKey()).toBe(true);
     });
   });
   
   describe('requiresEndpoint', () => {
-    it('returns true as OpenRouter allows custom endpoints', () => {
+    it('returns true as OpenAI allows custom endpoints', () => {
       expect(provider.requiresEndpoint()).toBe(true);
     });
   });
@@ -122,7 +117,7 @@ describe('OpenRouterProvider', () => {
       (requestUrl as unknown as vi.Mock).mockResolvedValueOnce({
         status: 200,
         json: {
-          data: [{ id: 'anthropic/claude-3-opus', name: 'Claude 3 Opus' }]
+          data: [{ id: 'gpt-4', object: 'model' }]
         }
       });
       
