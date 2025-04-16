@@ -14,6 +14,9 @@ import { ContentTypeRegistry } from '../handlers/ContentTypeRegistry';
 import { YouTubeHandler } from '../handlers/YouTubeHandler';
 import { MediumHandler } from '../handlers/MediumHandler';
 import { GoodreadsHandler } from '../handlers/GoodreadsHandler';
+import { RecipeHandler } from '../handlers/RecipeHandler';
+import { RestaurantHandler } from '../handlers/RestaurantHandler';
+import { MovieHandler } from '../handlers/MovieHandler';
 
 /**
  * Create an LLM provider based on the current plugin settings
@@ -249,11 +252,12 @@ export async function createImportPipelineOrchestrator(
 
 /**
  * Create and initialize a ContentTypeRegistry with all available handlers
+ * @param llmProvider Optional LLM provider for content-based detection
  * @returns ContentTypeRegistry with registered handlers
  */
-export function createContentTypeRegistry(): ContentTypeRegistry {
+export function createContentTypeRegistry(llmProvider?: LLMProvider): ContentTypeRegistry {
   const logger = getLogger();
-  const registry = new ContentTypeRegistry();
+  const registry = new ContentTypeRegistry(llmProvider);
   
   logger.debugLog("Creating content type registry");
   
@@ -281,7 +285,29 @@ export function createContentTypeRegistry(): ContentTypeRegistry {
     logger.error("Failed to register GoodreadsHandler", error);
   }
   
-  // More handlers will be added in future slices
+  // Register Recipe handler
+  try {
+    registry.register(new RecipeHandler());
+    logger.debugLog("Registered RecipeHandler");
+  } catch (error) {
+    logger.error("Failed to register RecipeHandler", error);
+  }
+  
+  // Register Restaurant handler
+  try {
+    registry.register(new RestaurantHandler());
+    logger.debugLog("Registered RestaurantHandler");
+  } catch (error) {
+    logger.error("Failed to register RestaurantHandler", error);
+  }
+  
+  // Register Movie handler
+  try {
+    registry.register(new MovieHandler());
+    logger.debugLog("Registered MovieHandler");
+  } catch (error) {
+    logger.error("Failed to register MovieHandler", error);
+  }
   
   logger.debugLog("Content type registry initialization complete", { 
     handlerCount: registry.getHandlers().length,

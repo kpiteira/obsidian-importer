@@ -2,7 +2,7 @@ import { Plugin, App } from 'obsidian';
 import { ImporterSettingTab } from './src/ui/ImporterSettingTab';
 import { PluginSettings, loadSettings as loadPluginSettings, saveSettings as savePluginSettings } from './src/utils/settings';
 import { UrlInputModal } from './src/ui/UrlInputModal';
-import { createImportPipelineOrchestrator, createProviderRegistry, createContentTypeRegistry } from './src/orchestrator/orchestratorFactory';
+import { createImportPipelineOrchestrator, createProviderRegistry, createContentTypeRegistry, createLLMProvider } from './src/orchestrator/orchestratorFactory';
 import { getLogger } from "./src/utils/importerLogger";
 import { LLMProviderRegistry } from './src/services/LLMProviderRegistry';
 import { ContentTypeRegistry } from './src/handlers/ContentTypeRegistry';
@@ -25,8 +25,11 @@ export default class MyPlugin extends Plugin {
       providers: this.providerRegistry.getProviderNames() 
     });
     
-    // Create and initialize the content type registry
-    this.contentTypeRegistry = createContentTypeRegistry();
+    // Get the selected LLM provider to pass to the content type registry
+    const llmProvider = this.providerRegistry.getProvider(this.settings.selectedProvider);
+    
+    // Create and initialize the content type registry with LLM provider
+    this.contentTypeRegistry = createContentTypeRegistry(llmProvider);
     logger.debugLog("Initialized content type registry", {
       handlers: this.contentTypeRegistry.getHandlers().map(h => h.type)
     });
@@ -70,10 +73,17 @@ export default class MyPlugin extends Plugin {
       this.providerRegistry = createProviderRegistry(this.settings);
     }
     
-    // Re-initialize content type registry
+    // Re-initialize content type registry with current LLM provider
     if (this.contentTypeRegistry) {
       this.contentTypeRegistry.clearCache();
-      this.contentTypeRegistry = createContentTypeRegistry();
+      
+      // Get the selected LLM provider
+      const llmProvider = this.providerRegistry
+        ? this.providerRegistry.getProvider(this.settings.selectedProvider)
+        : createLLMProvider(this.settings);
+      
+      // Create new content type registry with LLM provider
+      this.contentTypeRegistry = createContentTypeRegistry(llmProvider);
     }
   }
 
@@ -98,6 +108,19 @@ export default class MyPlugin extends Plugin {
         providers: this.providerRegistry.getProviderNames(),
         selectedProvider: this.settings.selectedProvider
       });
+      
+      // Update the content type registry with the new LLM provider
+      if (this.contentTypeRegistry) {
+        this.contentTypeRegistry.clearCache();
+        
+        // Get the new selected provider
+        const llmProvider = this.providerRegistry.getProvider(this.settings.selectedProvider);
+        
+        // Create new content type registry with new LLM provider
+        this.contentTypeRegistry = createContentTypeRegistry(llmProvider);
+        
+        logger.debugLog("Content type registry refreshed with new LLM provider");
+      }
     }
   }
 }

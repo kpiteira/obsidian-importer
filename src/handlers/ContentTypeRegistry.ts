@@ -157,41 +157,82 @@ export class ContentTypeRegistry {
       throw new Error("LLM provider is required for content-based detection");
     }
     
-    // Build concise prompt for the LLM
-    const truncatedContent = content.length > 2000 ? 
-      content.substring(0, 2000) + "..." : 
+    // Build detailed prompt for the LLM that explains the available content types
+    const truncatedContent = content.length > 3000 ? 
+      content.substring(0, 3000) + "..." : 
       content;
     
+    // Create type descriptions to help the LLM understand what each type means
+    const typeDescriptions = {
+      'recipe': 'Food preparation instructions with ingredients and steps',
+      'restaurant': 'Information about a dining establishment including location, cuisine, hours',
+      'movie': 'Film information including title, director, cast, plot summary',
+      'generic': 'Generic web content that doesn\'t fit any specialized category'
+    };
+    
+    // Build descriptions for available types only
+    const typeDescriptionLines = availableTypes
+      .map(type => `- ${type}: ${typeDescriptions[type as keyof typeof typeDescriptions] || type}`)
+      .join('\n');
+    
     const prompt = `
-I need you to identify the content type of this web page. Based on the URL and extracted content sample, classify this as one of the following types: ${availableTypes.join(', ')}.
- 
-URL: ${url}
-Content sample: 
-"${truncatedContent}"
+You are a specialized content classifier. Your task is to analyze a webpage URL and content sample to determine the most appropriate content type category.
 
-Return your answer as a single word matching one of the available types. If none match, return "generic".
+URL: ${url}
+
+Available content types:
+${typeDescriptionLines}
+
+Content sample:
+"""
+${truncatedContent}
+"""
+
+Based on the URL and content sample, which content type best describes this page?
+
+Respond with ONLY a single word matching one of the available types listed above (e.g., "recipe", "movie", etc.).
+Do not include any explanations or additional text. If none of the types match well, respond with "generic".
 `;
 
     try {
+      // Call LLM with a lower temperature for more consistent classification
       const response = await this.llmProvider.callLLM(prompt, {
-        systemPrompt: "You are a content classification system. Your job is to determine the type of content from a URL and sample.",
-        temperature: 0.2
+        systemPrompt: "You are a precise content classification system. Your only job is to identify the type of content from a webpage sample.",
+        temperature: 0.1
       });
       
       // Extract the content type from the response (get first line and clean it)
-      const contentType = response
+      let contentType = response
         .trim()
+        .toLowerCase()
         .split('\n')[0]
-        .replace(/['",.;]|^\s*|^I think this is a?|^This appears to be a?|^The content type is a?/gi, '')
-        .trim()
-        .toLowerCase();
+        .replace(/['",.;]|^\s*|^I think this is|^This appears to be|^The content type is|^the page is about|^this is a/gi, '')
+        .trim();
       
-      // Check if the returned type is in our available types
+      this.logger.debugLog(`LLM raw classified content as: ${contentType}`);
+      
+      // Check if the contentType matches any of our handler types directly
       if (availableTypes.includes(contentType)) {
         return contentType;
       }
       
+      // If not matched directly, try more flexible matching
+      // Try removing hyphens for hyphenated responses 
+      if (contentType.includes('-')) {
+        const normalizedType = contentType.replace(/-/g, '');
+        // Find handlers where the type without hyphens matches
+        const matchingType = availableTypes.find(type => 
+          type.replace(/-/g, '') === normalizedType
+        );
+        
+        if (matchingType) {
+          this.logger.debugLog(`Matched hyphenated response "${contentType}" to handler type "${matchingType}"`);
+          return matchingType;
+        }
+      }
+      
       // If LLM returned something not in our list, default to generic
+      this.logger.warn(`LLM returned unrecognized content type: ${contentType}, defaulting to generic`);
       return 'generic';
     } catch (error: unknown) {
       const errorMessage = error instanceof Error 
