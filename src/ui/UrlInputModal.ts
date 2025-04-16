@@ -12,6 +12,7 @@ import { ContentTypeRegistry } from '../handlers/ContentTypeRegistry';
 export class UrlInputModal extends Modal {
   private errorEl: HTMLElement | null = null;
   private ribbonEl: HTMLElement | null = null;
+  private progressDetailEl: HTMLElement | null = null; // New element for detailed progress
   private inputEl: HTMLInputElement | null = null;
   private settings: any;
   private logger: any;
@@ -57,6 +58,17 @@ export class UrlInputModal extends Modal {
     });
     const ribbonEl = this.ribbonEl;
     ribbonEl.style.display = 'none';
+    
+    // Progress detail element for showing step count and percentage (hidden by default)
+    this.progressDetailEl = contentEl.createEl('div', {
+      cls: 'obsidian-importer-progress-detail',
+      text: ''
+    });
+    const progressDetailEl = this.progressDetailEl;
+    progressDetailEl.style.display = 'none';
+    progressDetailEl.style.marginTop = '0.5em';
+    progressDetailEl.style.fontSize = '0.9em';
+    progressDetailEl.style.opacity = '0.8';
 
     // Error message element (hidden by default)
     this.errorEl = contentEl.createEl('div', {
@@ -84,6 +96,8 @@ export class UrlInputModal extends Modal {
         ribbonEl.style.display = 'none';
         ribbonEl.textContent = '';
         ribbonEl.classList.remove('obsidian-importer-detection-ribbon-success', 'obsidian-importer-detection-ribbon-error');
+        progressDetailEl.style.display = 'none';
+        progressDetailEl.textContent = '';
         this.clearError();
 
         if (!isValidExternalUrl(urlStr)) {
@@ -112,30 +126,24 @@ export class UrlInputModal extends Modal {
 
             orchestrator.onProgress((progress) => {
               ribbonEl.style.display = '';
-              switch (progress.stage) {
-                case 'validating_url':
-                  ribbonEl.textContent = 'Validating URL...';
-                  break;
-                case 'detecting_content_type':
-                  ribbonEl.textContent = 'Detecting content type...';
-                  break;
-                case 'downloading_content':
-                  ribbonEl.textContent = 'Downloading content...';
-                  break;
-                case 'processing_with_llm':
-                  ribbonEl.textContent = 'Processing with LLM...';
-                  break;
-                case 'writing_note':
-                  ribbonEl.textContent = 'Writing note...';
-                  break;
-                case 'completed':
-                  ribbonEl.textContent = 'Import complete!';
-                  ribbonEl.classList.add('obsidian-importer-detection-ribbon-success');
-                  inputEl.disabled = false;
-                  (this as any).closeOnPipelineComplete();
-                  break;
-                default:
-                  ribbonEl.textContent = '';
+              progressDetailEl.style.display = '';
+              
+              if (progress.stage === 'completed') {
+                ribbonEl.textContent = 'Import complete!';
+                progressDetailEl.textContent = 'Finalizing and opening note...';
+                ribbonEl.classList.add('obsidian-importer-detection-ribbon-success');
+                inputEl.disabled = false;
+                return;
+              }
+              
+              // For all other stages, show enhanced progress information
+              const percentComplete = Math.round((progress.step / progress.totalSteps) * 100);
+              ribbonEl.textContent = progress.message;
+              progressDetailEl.textContent = `Step ${progress.step}/${progress.totalSteps} (${percentComplete}% complete)`;
+              
+              // Add content type specific detail if available
+              if (progress.stage === 'downloading_content' && progress.contentType) {
+                progressDetailEl.textContent += ` - ${progress.contentType}`;
               }
             });
 
@@ -144,8 +152,18 @@ export class UrlInputModal extends Modal {
               ribbonEl.style.display = '';
               ribbonEl.textContent = 'Error: ' + msg;
               ribbonEl.classList.add('obsidian-importer-detection-ribbon-error');
+              progressDetailEl.style.display = 'none';
               this.showError(msg);
               inputEl.disabled = false;
+            });
+            
+            // Add complete handler to open the created note
+            orchestrator.onComplete((notePath) => {
+              setTimeout(() => {
+                this.close();
+                // Open the created note in Obsidian
+                this.app.workspace.openLinkText(notePath, '', true);
+              }, 500); // Small delay to ensure the UI shows the completion message
             });
 
             await orchestrator.run(urlStr);
@@ -154,17 +172,13 @@ export class UrlInputModal extends Modal {
             ribbonEl.style.display = '';
             ribbonEl.textContent = 'Error: ' + msg;
             ribbonEl.classList.add('obsidian-importer-detection-ribbon-error');
+            progressDetailEl.style.display = 'none';
             this.showError(msg);
             inputEl.disabled = false;
           }
         })();
       }
     });
-
-    // Allow orchestrator/caller to close the modal when pipeline completes
-    (this as any).closeOnPipelineComplete = () => {
-      this.close();
-    };
   }
 
   private showError(message: string) {
@@ -187,6 +201,7 @@ export class UrlInputModal extends Modal {
     contentEl.empty();
     this.errorEl = null;
     this.ribbonEl = null;
+    this.progressDetailEl = null;
     this.inputEl = null;
     // Defensive: ensure no progress ribbon or error is left visible
     // (in case modal is closed before pipeline completes)

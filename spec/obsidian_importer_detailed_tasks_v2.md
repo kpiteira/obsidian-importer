@@ -89,28 +89,28 @@ Instead of breaking down tasks by component, we'll organize work into **incremen
 **Goal**: Add support for Medium articles as the first new content type.
 
 ### Slice 3.1: Medium Handler Implementation
-- [ ] **Implementation**:
+- [x] **Implementation**:
   - Create `MediumHandler` class implementing `ContentTypeHandler`
   - Implement URL-based detection for Medium domains
   - Create web scraper for Medium article content
   - Implement Medium-specific prompt template
-- [ ] **Integration**:
+- [x] **Integration**:
   - Register Medium handler with content type registry
   - Update note creation to handle Medium article format
   - Create Medium article template renderer
-- [ ] **Testing**:
+- [x] **Testing**:
   - Test end-to-end Medium article import
   - Verify correct metadata extraction and note formatting
 
 ### Slice 3.2: Enhanced Progress Reporting
-- [ ] **Implementation**:
+- [x] **Implementation**:
   - Update progress indication system to show step count and percentages
   - Implement handler-specific progress messages
   - Add automatic note opening after successful import
-- [ ] **Integration**:
+- [x] **Integration**:
   - Update UI components to display enhanced progress
   - Connect note creation success to automatic opening
-- [ ] **Testing**:
+- [x] **Testing**:
   - Test progress reporting during Medium imports
   - Verify note is automatically opened when import completes
 

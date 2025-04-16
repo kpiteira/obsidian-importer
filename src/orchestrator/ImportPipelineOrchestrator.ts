@@ -13,13 +13,21 @@ import { LLMProvider as ServiceLLMProvider, LLMOptions } from "../services/LLMPr
  * Uses dependency injection for handlers/services.
  */
 
+// Define common progress interface for step tracking
+interface ProgressStep {
+  stage: string;
+  message: string;
+  step: number;
+  totalSteps: number;
+}
+
 export type ImportPipelineProgress =
-  | { stage: 'validating_url' }
-  | { stage: 'detecting_content_type' } // New explicit stage for content type detection
-  | { stage: 'downloading_content' }
-  | { stage: 'processing_with_llm' }
-  | { stage: 'writing_note' }
-  | { stage: 'completed'; notePath: string };
+  | (ProgressStep & { stage: 'validating_url' })
+  | (ProgressStep & { stage: 'detecting_content_type' })
+  | (ProgressStep & { stage: 'downloading_content'; contentType?: string })
+  | (ProgressStep & { stage: 'processing_with_llm' })
+  | (ProgressStep & { stage: 'writing_note' })
+  | { stage: 'completed'; notePath: string; message: string };
 
 export type ImportPipelineError = {
   stage: string;
@@ -29,6 +37,7 @@ export type ImportPipelineError = {
 
 export type ProgressCallback = (progress: ImportPipelineProgress) => void;
 export type ErrorCallback = (error: ImportPipelineError) => void;
+export type CompleteCallback = (notePath: string) => void;
 
 /**
  * Interface for a minimal LLM provider that takes a prompt and returns the LLM's markdown response.
@@ -72,6 +81,7 @@ export interface ImportPipelineDependencies {
 export class ImportPipelineOrchestrator {
   private progressCallbacks: ProgressCallback[] = [];
   private errorCallbacks: ErrorCallback[] = [];
+  private completeCallbacks: CompleteCallback[] = [];
   private deps: ImportPipelineDependencies;
 
   constructor(deps: ImportPipelineDependencies) {
@@ -86,6 +96,10 @@ export class ImportPipelineOrchestrator {
     this.errorCallbacks.push(cb);
   }
 
+  onComplete(cb: CompleteCallback) {
+    this.completeCallbacks.push(cb);
+  }
+
   private emitProgress(progress: ImportPipelineProgress) {
     for (const cb of this.progressCallbacks) cb(progress);
   }
@@ -96,6 +110,10 @@ export class ImportPipelineOrchestrator {
       `[ImportPipelineOrchestrator] Error at stage "${error.stage}": ${error.userMessage}`,
       error.error
     );
+  }
+
+  private emitComplete(notePath: string) {
+    for (const cb of this.completeCallbacks) cb(notePath);
   }
 
   /**
@@ -119,7 +137,7 @@ export class ImportPipelineOrchestrator {
     let notePath: string;
 
     // 1. URL Validation
-    this.emitProgress({ stage: 'validating_url' });
+    this.emitProgress({ stage: 'validating_url', message: 'Validating URL', step: 1, totalSteps: 5 });
     try {
       // Basic URL format validation
       let urlObj: URL;
@@ -130,7 +148,7 @@ export class ImportPipelineOrchestrator {
       }
       
       // 2. Content type detection - explicitly separate stage now
-      this.emitProgress({ stage: 'detecting_content_type' });
+      this.emitProgress({ stage: 'detecting_content_type', message: 'Detecting content type', step: 2, totalSteps: 5 });
       
       // Content type detection using registry if available, fallback to old method
       if (this.deps.contentTypeRegistry) {
@@ -164,7 +182,13 @@ export class ImportPipelineOrchestrator {
     }
 
     // 3. Content Download (direct via handler)
-    this.emitProgress({ stage: 'downloading_content' });
+    this.emitProgress({ 
+      stage: 'downloading_content', 
+      message: `Downloading ${handler.type} content`, 
+      contentType: handler.type,
+      step: 3, 
+      totalSteps: 5 
+    });
     try {
       // Use cached content from registry if available
       let cachedContent: string | undefined;
@@ -192,7 +216,7 @@ export class ImportPipelineOrchestrator {
     }
 
     // 4. LLM Prompt Generation and Processing
-    this.emitProgress({ stage: 'processing_with_llm' });
+    this.emitProgress({ stage: 'processing_with_llm', message: 'Processing with LLM', step: 4, totalSteps: 5 });
     try {
       // Always pass the unified content object to getPrompt
       llmPrompt = handler.getPrompt(unifiedContent);
@@ -223,7 +247,7 @@ export class ImportPipelineOrchestrator {
     }
 
     // 5. Note Writing
-    this.emitProgress({ stage: 'writing_note' });
+    this.emitProgress({ stage: 'writing_note', message: 'Writing note', step: 5, totalSteps: 5 });
     try {
       // 5.1 Determine folder path from handler (if available)
       const folderPath = this.deps.settings.defaultFolder + '/' + handler.getFolderName(unifiedContent);
@@ -254,7 +278,8 @@ export class ImportPipelineOrchestrator {
     }
 
     // 6. Completed
-    this.emitProgress({ stage: 'completed', notePath });
+    this.emitProgress({ stage: 'completed', notePath, message: 'Import pipeline completed successfully' });
+    this.emitComplete(notePath);
   }
 
   /**
