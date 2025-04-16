@@ -1,6 +1,7 @@
 import { getLogger } from "../utils/importerLogger";
 import { ContentTypeHandler } from "../handlers/ContentTypeHandler";
 import { detectContentType } from "../handlers/typeDispatcher";
+import { ContentTypeRegistry } from "../handlers/ContentTypeRegistry";
 import { PluginSettings } from "../utils/settings";
 import { sanitizeFilename } from "../utils/sanitize";
 import { LLMProvider as ServiceLLMProvider, LLMOptions } from "../services/LLMProvider";
@@ -65,6 +66,7 @@ export interface ImportPipelineDependencies {
     error: (...args: unknown[]) => void;
     debugLog: (...args: unknown[]) => void;
   };
+  contentTypeRegistry?: ContentTypeRegistry; // Add ContentTypeRegistry as optional dependency
 }
 
 export class ImportPipelineOrchestrator {
@@ -179,7 +181,7 @@ export class ImportPipelineOrchestrator {
     let noteContent: string;
     let notePath: string;
 
-    // 1. URL Validation (basic)
+    // 1. URL Validation (basic) and content type detection
     this.emitProgress({ stage: 'validating_url' });
     try {
       // Basic URL format validation
@@ -189,8 +191,16 @@ export class ImportPipelineOrchestrator {
       } catch (err) {
         throw { userMessage: "Invalid URL format. Please enter a complete URL including 'https://'." };
       }
-      // Handler existence check
-      handler = detectContentType(urlObj);
+      
+      // Content type detection using registry if available, fallback to old method
+      if (this.deps.contentTypeRegistry) {
+        logger?.debugLog?.("Using ContentTypeRegistry for content type detection");
+        handler = await this.deps.contentTypeRegistry.detectContentType(url);
+      } else {
+        logger?.debugLog?.("Using legacy detection method");
+        handler = detectContentType(urlObj);
+      }
+      
       if (!handler) {
         throw { 
           userMessage: `This content type is not supported yet. Currently, only YouTube videos are supported.`
@@ -210,7 +220,7 @@ export class ImportPipelineOrchestrator {
       return;
     }
 
-    // 2. Handler Selection (Content Type Detection) - now handled in URL validation above
+    // 2. Handler Selection (Content Type Detection) - now handled above
 
     // 3. Content Download (direct via handler)
     this.emitProgress({ stage: 'downloading_content' });

@@ -2,6 +2,7 @@ import { Modal, App, Notice } from 'obsidian';
 import { isValidExternalUrl } from '../utils/url';
 import { ImportPipelineOrchestrator, ImportPipelineDependencies, ImportPipelineProgress, ImportPipelineError } from '../orchestrator/ImportPipelineOrchestrator';
 import { LLMProviderRegistry } from '../services/LLMProviderRegistry';
+import { ContentTypeRegistry } from '../handlers/ContentTypeRegistry';
 
 /**
  * UrlInputModal
@@ -14,16 +15,24 @@ export class UrlInputModal extends Modal {
   private inputEl: HTMLInputElement | null = null;
   private settings: any;
   private logger: any;
-  private providerRegistry: LLMProviderRegistry | null = null; // Added provider registry
+  private providerRegistry: LLMProviderRegistry | null = null;
+  private contentTypeRegistry: ContentTypeRegistry | null = null;  // Add ContentTypeRegistry
   private progressUnsub: (() => void) | null = null;
   private errorUnsub: (() => void) | null = null;
   private pipelineActive: boolean = false;
 
-  constructor(app: App, settings: any, logger: any, providerRegistry?: LLMProviderRegistry) {
+  constructor(
+    app: App, 
+    settings: any, 
+    logger: any, 
+    providerRegistry?: LLMProviderRegistry,
+    contentTypeRegistry?: ContentTypeRegistry  // Add ContentTypeRegistry parameter
+  ) {
     super(app);
     this.settings = settings;
     this.logger = logger;
     this.providerRegistry = providerRegistry || null;
+    this.contentTypeRegistry = contentTypeRegistry || null;  // Store ContentTypeRegistry
   }
 
   onOpen() {
@@ -92,12 +101,13 @@ export class UrlInputModal extends Modal {
         (async () => {
           try {
             const { createImportPipelineOrchestrator } = await import('../orchestrator/orchestratorFactory');
-            // Pass the provider registry to the orchestrator factory
+            // Pass both registries to the orchestrator factory
             const orchestrator = await createImportPipelineOrchestrator(
               this.app, 
               this.settings, 
               this.logger, 
-              this.providerRegistry || undefined
+              this.providerRegistry || undefined,
+              this.contentTypeRegistry || undefined  // Pass ContentTypeRegistry
             );
 
             orchestrator.onProgress((progress) => {

@@ -132,6 +132,29 @@ Subtitles: {{transcript}}
   }
 
   /**
+   * Enhanced URL-based detection for ContentTypeRegistry.
+   * For YouTube, this simply uses the synchronous detect method
+   * but returns a Promise as required by the registry interface.
+   * 
+   * @param {URL} url - The URL to check
+   * @returns {Promise<boolean>} Promise resolving to true if this handler can process the URL
+   */
+  async canHandleUrl(url: URL): Promise<boolean> {
+    return this.detect(url);
+  }
+
+  /**
+   * Determines if this handler requires content-based detection.
+   * YouTube URLs can be identified by URL pattern alone, so no content-based
+   * detection is required.
+   * 
+   * @returns {boolean} False as YouTube detection is URL-based only
+   */
+  requiresContentDetection(): boolean {
+    return false;
+  }
+
+  /**
    * Generates the LLM prompt for YouTube video summarization by inserting
    * the video transcript into the template.
    * 

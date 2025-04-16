@@ -2,13 +2,15 @@ import { Plugin, App } from 'obsidian';
 import { ImporterSettingTab } from './src/ui/ImporterSettingTab';
 import { PluginSettings, loadSettings as loadPluginSettings, saveSettings as savePluginSettings } from './src/utils/settings';
 import { UrlInputModal } from './src/ui/UrlInputModal';
-import { createImportPipelineOrchestrator, createProviderRegistry } from './src/orchestrator/orchestratorFactory';
+import { createImportPipelineOrchestrator, createProviderRegistry, createContentTypeRegistry } from './src/orchestrator/orchestratorFactory';
 import { getLogger } from "./src/utils/importerLogger";
 import { LLMProviderRegistry } from './src/services/LLMProviderRegistry';
+import { ContentTypeRegistry } from './src/handlers/ContentTypeRegistry';
 
 export default class MyPlugin extends Plugin {
   settings: PluginSettings;
   providerRegistry: LLMProviderRegistry;
+  contentTypeRegistry: ContentTypeRegistry;
 
   async onload() {
     await this.loadSettings();
@@ -22,25 +24,33 @@ export default class MyPlugin extends Plugin {
     logger.debugLog("Initialized provider registry", { 
       providers: this.providerRegistry.getProviderNames() 
     });
+    
+    // Create and initialize the content type registry
+    this.contentTypeRegistry = createContentTypeRegistry();
+    logger.debugLog("Initialized content type registry", {
+      handlers: this.contentTypeRegistry.getHandlers().map(h => h.type)
+    });
 
-    // Instantiate orchestrator using the factory with the provider registry
+    // Instantiate orchestrator using the factory with both registries
     const orchestrator = await createImportPipelineOrchestrator(
       this.app, 
       this.settings, 
       logger,
-      this.providerRegistry // Pass the provider registry to the orchestrator
+      this.providerRegistry,
+      this.contentTypeRegistry
     );
 
     this.addCommand({
       id: 'open-url-input-modal',
       name: 'Import from URL...',
       callback: () => {
-        // Open the modal and pass the provider registry
+        // Open the modal and pass the registries
         new UrlInputModal(
           this.app, 
           this.settings, 
           logger, 
-          this.providerRegistry // Pass the provider registry to the modal
+          this.providerRegistry,
+          this.contentTypeRegistry
         ).open();
       }
     });
@@ -54,10 +64,16 @@ export default class MyPlugin extends Plugin {
     this.settings = await loadPluginSettings(this);
     getLogger().setDebugMode(this.settings.debug);
     
-    // Re-initialize provider registry when settings change
+    // Re-initialize registries when settings change
     if (this.providerRegistry) {
       this.providerRegistry.clear();
       this.providerRegistry = createProviderRegistry(this.settings);
+    }
+    
+    // Re-initialize content type registry
+    if (this.contentTypeRegistry) {
+      this.contentTypeRegistry.clearCache();
+      this.contentTypeRegistry = createContentTypeRegistry();
     }
   }
 

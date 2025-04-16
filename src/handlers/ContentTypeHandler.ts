@@ -22,6 +22,21 @@ export interface ContentTypeHandler {
    * @returns True if this handler can process the URL, false otherwise.
    */
   detect(url: URL): boolean;
+  
+  /**
+   * Enhanced URL-based detection for ContentTypeRegistry.
+   * By default, uses the detect(url) method.
+   * @param url The URL to check
+   * @returns Promise resolving to true if this handler can process the URL
+   */
+  canHandleUrl?(url: URL): Promise<boolean>;
+  
+  /**
+   * Determines if this handler requires content-based detection.
+   * Used by the registry to decide which detection strategy to use.
+   * @returns True if content-based detection is required, false if URL-based detection is sufficient
+   */
+  requiresContentDetection?(): boolean;
 
   /**
    * Generates the LLM prompt for this content type, based on provided metadata.

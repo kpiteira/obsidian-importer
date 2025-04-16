@@ -10,6 +10,8 @@ import { OpenAIProvider } from '../services/OpenAIProvider';
 import { OpenRouterProvider } from '../services/OpenRouterProvider';
 import { OllamaProvider } from '../services/OllamaProvider';
 import { maskApiKey } from '../utils/apiKeyUtils';
+import { ContentTypeRegistry } from '../handlers/ContentTypeRegistry';
+import { YouTubeHandler } from '../handlers/YouTubeHandler';
 
 /**
  * Create an LLM provider based on the current plugin settings
@@ -205,13 +207,15 @@ export function createProviderRegistry(settings: PluginSettings): LLMProviderReg
  * @param settings Plugin settings
  * @param logger Logger instance
  * @param providerRegistry Optional provider registry
+ * @param contentTypeRegistry Optional content type registry
  * @returns Configured ImportPipelineOrchestrator
  */
 export async function createImportPipelineOrchestrator(
   app: App,
   settings: PluginSettings,
   logger: ReturnType<typeof getLogger>,
-  providerRegistry?: LLMProviderRegistry
+  providerRegistry?: LLMProviderRegistry,
+  contentTypeRegistry?: ContentTypeRegistry
 ) {
   let llmProvider: LLMProvider;
   
@@ -236,6 +240,35 @@ export async function createImportPipelineOrchestrator(
     settings,
     llmProvider,
     noteWriter,
-    logger
+    logger,
+    contentTypeRegistry
   });
+}
+
+/**
+ * Create and initialize a ContentTypeRegistry with all available handlers
+ * @returns ContentTypeRegistry with registered handlers
+ */
+export function createContentTypeRegistry(): ContentTypeRegistry {
+  const logger = getLogger();
+  const registry = new ContentTypeRegistry();
+  
+  logger.debugLog("Creating content type registry");
+  
+  // Register YouTube handler
+  try {
+    registry.register(new YouTubeHandler());
+    logger.debugLog("Registered YouTubeHandler");
+  } catch (error) {
+    logger.error("Failed to register YouTubeHandler", error);
+  }
+  
+  // More handlers will be added in future slices
+  
+  logger.debugLog("Content type registry initialization complete", { 
+    handlerCount: registry.getHandlers().length,
+    handlerTypes: registry.getHandlers().map(h => h.type)
+  });
+  
+  return registry;
 }
